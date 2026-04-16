@@ -51,7 +51,7 @@ Tech Stack
 Notes
 - Works best with standard .mp4 or .mov files
 - use this pathname to access apple's official aerials. '/Users/Name/Library/Application Support/com.apple.wallpaper/aerials/videos/'
-- I found that this website has great videos for wallpapers "moewalls.com"
+- I found that this website has great videos for wallpapers "[moewalls.com](https://moewalls.com)"
 - It will deny opening the first time because i'm too lazy to pay for something. Go to settings -> privacy & security -> open anyways
 - This is my first git project so tell me if something is incorrect or off.
 
