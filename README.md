@@ -1,3 +1,5 @@
+https://github.com/user-attachments/assets/632269ea-a543-48a1-a6f9-4583deff1ca6
+
 VideoWallpaper (macOS)
 
 A lightweight menu bar app that lets you set looping videos as your desktop wallpaper. Built with SwiftUI and AVFoundation, it runs quietly in the background and gives quick access to your video wallpapers through a clean, minimal interface. (Entirely Vibe-Coded).
