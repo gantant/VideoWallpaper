@@ -145,6 +145,7 @@ class WallpaperWindowController: NSObject {
 
 struct ContentView: View {
     @StateObject private var vm = WallpaperViewModel()
+    @StateObject private var updater = GitHubUpdater()
     @State private var showingCollection = false
 
     var body: some View {
@@ -256,11 +257,26 @@ struct ContentView: View {
 
                     Divider().background(Color.white.opacity(0.1))
 
+                    Button {
+                        Task {
+                            await updater.checkForUpdates()
+                        }
+                    } label: {
+                        Label("Check for Updates", systemImage: "arrow.down.circle")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(DarkButtonStyle(color: .blue.opacity(0.5)))
                     Button { NSApp.terminate(nil) } label: {
                         Label("Quit VideoWallpaper", systemImage: "power")
                             .frame(maxWidth: .infinity).padding(.vertical, 8)
                     }.buttonStyle(DarkButtonStyle(color: .white.opacity(0.15)))
                 }
+            }
+        }
+        .onAppear {
+            Task {
+                await updater.checkForUpdates()
             }
         }
         .frame(width: 360, height: 480)
