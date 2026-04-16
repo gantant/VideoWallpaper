@@ -1,14 +1,5 @@
 // ============================================================
-// VideoWallpaper – macOS Menu Bar Video Wallpaper App
-// ============================================================
-// HOW TO SET UP:
-//  1. Xcode → File → New → Project → macOS → App
-//  2. Name: "VideoWallpaper", Interface: SwiftUI, Language: Swift
-//  3. Replace ALL of ContentView.swift with this file
-//  4. Delete VideoWallpaperApp.swift (the @main entry is here)
-//  5. In Info.plist, add:
-//       "Application is agent (UIElement)" → Boolean → YES
-//  6. Cmd+R to run!
+// VideoWallpaper – ContentView.swift
 // ============================================================
 
 import SwiftUI
@@ -24,25 +15,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var popover: NSPopover?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Must be called AFTER launch, not in init
         NSApp.setActivationPolicy(.accessory)
 
-        // Build popover
         let p = NSPopover()
-        p.contentSize = NSSize(width: 360, height: 480)
+        p.contentSize = NSSize(width: 360, height: 560)
         p.behavior = .transient
         p.contentViewController = NSHostingController(
             rootView: ContentView().preferredColorScheme(.dark)
         )
         self.popover = p
 
-        // Build status item — must retain it strongly
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(systemSymbolName: "play.rectangle.fill",
                                      accessibilityDescription: "Video Wallpaper")
         item.button?.action = #selector(togglePopover(_:))
         item.button?.target = self
-        self.statusItem = item  // strong reference — critical!
+        self.statusItem = item
     }
 
     @objc func togglePopover(_ sender: AnyObject?) {
@@ -56,17 +44,145 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+// MARK: - Cursor Effect Window
+
+class CursorEffectWindow: NSWindow {
+    static let shared = CursorEffectWindow()
+    private var effectView: CursorEffectView?
+
+    init() {
+        super.init(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)))
+        self.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        self.isOpaque = false
+        self.backgroundColor = .clear
+        self.hasShadow = false
+        self.ignoresMouseEvents = true
+    }
+
+    func start(ripple: Bool, particles: Bool) {
+        guard let screen = NSScreen.main else { return }
+        self.setFrame(screen.frame, display: true)
+        let view = CursorEffectView(ripple: ripple, particles: particles)
+        self.contentView = view
+        self.effectView = view
+        self.orderFront(nil)
+        view.startTracking()
+    }
+
+    func stop() {
+        effectView?.stopTracking()
+        self.orderOut(nil)
+        effectView = nil
+    }
+}
+
+class CursorEffectView: NSView {
+    private var rippleEnabled: Bool
+    private var particlesEnabled: Bool
+    private var trackingTimer: Timer?
+    private var ripples: [(pos: CGPoint, age: CGFloat)] = []
+    private var particles: [(pos: CGPoint, vel: CGPoint, age: CGFloat)] = []
+    private var lastMousePos: CGPoint = .zero
+    private var renderTimer: Timer?
+
+    init(ripple: Bool, particles: Bool) {
+        self.rippleEnabled = ripple
+        self.particlesEnabled = particles
+        super.init(frame: .zero)
+        self.wantsLayer = true
+        self.layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func startTracking() {
+        renderTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
+    }
+
+    func stopTracking() {
+        renderTimer?.invalidate()
+        renderTimer = nil
+    }
+
+    private func tick() {
+        let mouse = convertFromScreen(NSEvent.mouseLocation)
+        let moved = hypot(mouse.x - lastMousePos.x, mouse.y - lastMousePos.y) > 2
+
+        if moved {
+            if rippleEnabled {
+                ripples.append((pos: mouse, age: 0))
+            }
+            if particlesEnabled {
+                for _ in 0..<3 {
+                    let vel = CGPoint(
+                        x: CGFloat.random(in: -2...2),
+                        y: CGFloat.random(in: 1...3)
+                    )
+                    particles.append((pos: mouse, vel: vel, age: 0))
+                }
+            }
+            lastMousePos = mouse
+        }
+
+        ripples = ripples.compactMap { r -> (CGPoint, CGFloat)? in
+            let newAge = r.age + 0.03
+            return newAge < 1.0 ? (r.pos, newAge) : nil
+        }
+        particles = particles.compactMap { p -> (CGPoint, CGPoint, CGFloat)? in
+            let newAge = p.age + 0.04
+            let newPos = CGPoint(x: p.pos.x + p.vel.x, y: p.pos.y - p.vel.y)
+            return newAge < 1.0 ? (newPos, p.vel, newAge) : nil
+        }
+
+        needsDisplay = true
+    }
+
+    private func convertFromScreen(_ point: CGPoint) -> CGPoint {
+        guard let screen = NSScreen.main else { return point }
+        // Flip y: NSScreen origin is bottom-left, NSView origin is also bottom-left
+        return CGPoint(x: point.x - screen.frame.minX, y: point.y - screen.frame.minY)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        ctx.clear(dirtyRect)
+
+        // Draw ripples
+        for r in ripples {
+            let radius = r.age * 60
+            let alpha = (1.0 - r.age) * 0.5
+            ctx.setStrokeColor(NSColor(white: 1, alpha: alpha).cgColor)
+            ctx.setLineWidth(1.5)
+            ctx.addEllipse(in: CGRect(x: r.pos.x - radius, y: r.pos.y - radius,
+                                      width: radius * 2, height: radius * 2))
+            ctx.strokePath()
+        }
+
+        // Draw particles
+        for p in particles {
+            let alpha = (1.0 - p.age) * 0.8
+            let size = (1.0 - p.age) * 4
+            ctx.setFillColor(NSColor(red: 0.7, green: 0.5, blue: 1.0, alpha: alpha).cgColor)
+            ctx.fillEllipse(in: CGRect(x: p.pos.x - size/2, y: p.pos.y - size/2,
+                                       width: size, height: size))
+        }
+    }
+}
+
 // MARK: - Wallpaper Window Controller
 
 class WallpaperWindowController: NSObject {
     static let shared = WallpaperWindowController()
 
     private var wallpaperWindows: [NSWindow] = []
-    private var players: [AVQueuePlayer] = []
+    var players: [AVQueuePlayer] = []
     private var loopers: [AVPlayerLooper] = []
     private var observations: [NSKeyValueObservation] = []
 
-    func setVideo(url: URL) async {
+    func setVideo(url: URL, rate: Float = 1.0) async {
         await MainActor.run { removeWallpaper() }
 
         for screen in NSScreen.screens {
@@ -74,18 +190,7 @@ class WallpaperWindowController: NSObject {
             player.isMuted = true
             player.volume = 0
 
-            // Build video-only composition (strips audio track)
-            let asset = AVURLAsset(url: url)
-            let composition = AVMutableComposition()
-            if let videoTrack = try? await asset.loadTracks(withMediaType: .video).first,
-               let compTrack = composition.addMutableTrack(withMediaType: .video,
-                                                           preferredTrackID: kCMPersistentTrackID_Invalid) {
-                let duration = (try? await asset.load(.duration)) ?? .zero
-                try? compTrack.insertTimeRange(CMTimeRange(start: .zero, duration: duration),
-                                               of: videoTrack, at: .zero)
-            }
-
-            let item = AVPlayerItem(asset: composition)
+            let item = AVPlayerItem(url: url)
             let looper = AVPlayerLooper(player: player, templateItem: item)
 
             let playerView = AVPlayerView()
@@ -107,8 +212,9 @@ class WallpaperWindowController: NSObject {
             win.contentView = playerView
             win.orderFront(nil)
 
-            player.play()
-            watchPlayer(player)
+            player.rate = rate
+
+            watchPlayer(player, rate: rate)
 
             await MainActor.run {
                 wallpaperWindows.append(win)
@@ -118,11 +224,16 @@ class WallpaperWindowController: NSObject {
         }
     }
 
-    private func watchPlayer(_ player: AVQueuePlayer) {
-        let obs = player.observe(\.timeControlStatus, options: [.new]) { p, _ in
+    func setRate(_ rate: Float) {
+        players.forEach { $0.rate = rate }
+    }
+
+    private func watchPlayer(_ player: AVQueuePlayer, rate: Float) {
+        let obs = player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
+            guard let self else { return }
             if p.timeControlStatus == .paused || p.timeControlStatus == .waitingToPlayAtSpecifiedRate {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    p.play()
+                    p.rate = rate
                 }
             }
         }
@@ -147,139 +258,349 @@ struct ContentView: View {
     @StateObject private var vm = WallpaperViewModel()
     @StateObject private var updater = GitHubUpdater()
     @State private var showingCollection = false
+    @State private var showingSettings = false
+    @AppStorage("liquidGlass") private var liquidGlass = false
 
     var body: some View {
         ZStack {
-            Color(red: 0.08, green: 0.08, blue: 0.10).ignoresSafeArea()
+            if liquidGlass, #available(macOS 26, *) {
+                Color.clear.ignoresSafeArea()
+            } else {
+                Color(red: 0.08, green: 0.08, blue: 0.10).ignoresSafeArea()
+            }
 
-            if showingCollection {
+            if showingSettings {
+                SettingsView(vm: vm, showingSettings: $showingSettings)
+            } else if showingCollection {
                 CollectionView(vm: vm, showingCollection: $showingCollection)
             } else {
-                VStack(spacing: 20) {
-                    // Header
-                    VStack(spacing: 10) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "play.rectangle.fill")
-                                .font(.system(size: 32))
-                                .foregroundStyle(.purple)
-                            Text("Video Wallpaper")
-                                .font(.title3.bold())
-                                .foregroundStyle(.white)
-                            Text("Live video on your desktop")
-                                .font(.caption)
-                                .foregroundStyle(.gray)
-                        }
+                mainView
+            }
+        }
+        .environment(\.controlActiveState, .active)
+        .frame(width: 360, height: 560)
+    }
 
+    var mainView: some View {
+        VStack(spacing: 14) {
+            // Header
+            VStack(spacing: 4) {
+                Image(systemName: "play.rectangle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.purple)
+                Text("Video Wallpaper")
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+                Text("Live video on your desktop")
+                    .font(.caption)
+                    .foregroundStyle(.gray)
+            }
+
+            Divider().background(Color.white.opacity(0.1))
+
+            // Current selection
+            VStack(spacing: 8) {
+                if let url = vm.selectedURL {
+                    HStack(spacing: 8) {
+                        Image(systemName: "film").foregroundStyle(.purple)
+                        Text(url.lastPathComponent)
+                            .foregroundStyle(.white).font(.caption)
+                            .lineLimit(1).truncationMode(.middle)
+                        Spacer()
                         Button {
-                            showingCollection = true
+                            vm.selectedURL = nil
+                            vm.removeWallpaper()
                         } label: {
-                            Image(systemName: "folder.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 36, height: 36)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                                )
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.gray)
+                        }.buttonStyle(.plain)
+                    }
+                    .padding(10)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+
+                Button { vm.browseForVideo() } label: {
+                    Label(vm.selectedURL == nil ? "Choose Video…" : "Change Video…",
+                          systemImage: "folder.fill")
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                }
+                .buttonStyle(DarkButtonStyle(color: .purple))
+            }
+
+            // Speed controls
+            if vm.isActive {
+                VStack(spacing: 6) {
+                    HStack {
+                        Text("Speed").font(.caption).foregroundStyle(.gray)
+                        Spacer()
+                        Text(String(format: "%.2fx", vm.playbackRate))
+                            .font(.caption.monospacedDigit()).foregroundStyle(.white)
+                    }
+                    Slider(value: $vm.playbackRate, in: 0.25...2.0, step: 0.05)
+                        .tint(.purple)
+                        .onChange(of: vm.playbackRate) { _, v in
+                            WallpaperWindowController.shared.setRate(Float(v))
                         }
-                        .buttonStyle(HoverGlowButtonStyle())
+                    HStack(spacing: 6) {
+                        ForEach([0.5, 1.0, 1.5, 2.0], id: \.self) { preset in
+                            Button {
+                                vm.playbackRate = preset
+                                WallpaperWindowController.shared.setRate(Float(preset))
+                            } label: {
+                                Text("\(preset, specifier: "%.1f")x")
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(vm.playbackRate == preset
+                                                  ? Color.purple.opacity(0.5)
+                                                  : Color.white.opacity(0.08))
+                                    )
+                                    .foregroundStyle(.white)
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+
+            // Action grid
+            if vm.selectedURL != nil {
+                let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+                LazyVGrid(columns: cols, spacing: 10) {
+                    gridButton(icon: vm.isCurrentInCollection() ? "checkmark.circle.fill" : "star.fill",
+                               label: vm.isCurrentInCollection() ? "Saved" : "Save",
+                               color: vm.isCurrentInCollection() ? .gray : .yellow,
+                               disabled: vm.isCurrentInCollection()) { vm.addCurrentToCollection() }
+
+                    gridButton(icon: vm.isActive ? "arrow.clockwise" : "desktopcomputer",
+                               label: vm.isActive ? "Restart" : "Set",
+                               color: .green) { vm.applyWallpaper() }
+
+                    if vm.isActive {
+                        gridButton(icon: "stop.circle", label: "Remove", color: .red.opacity(0.85)) {
+                            vm.removeWallpaper()
+                        }
                     }
 
-                    Divider().background(Color.white.opacity(0.1))
+                    gridButton(icon: "folder.fill", label: "Collection", color: .blue) {
+                        showingCollection = true
+                    }
+                }
+            }
 
-                    // Current selection
-                    VStack(spacing: 10) {
-                        if let url = vm.selectedURL {
-                            HStack(spacing: 8) {
-                                Image(systemName: "film").foregroundStyle(.purple)
+            // Status
+            HStack(spacing: 6) {
+                Circle().fill(vm.isActive ? Color.green : Color.gray).frame(width: 7, height: 7)
+                Text(vm.isActive ? "Wallpaper is active" : "No wallpaper set")
+                    .font(.caption).foregroundStyle(.gray)
+            }
+
+            Spacer()
+            Divider().background(Color.white.opacity(0.1))
+
+            // Bottom bar
+            HStack(spacing: 8) {
+                Button { showingSettings = true } label: {
+                    Image(systemName: "gearshape.fill")
+                        .frame(width: 36, height: 32)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }.buttonStyle(.plain)
+
+                Button {
+                    Task { await updater.checkForUpdates(showNoUpdateAlert: true) }
+                } label: {
+                    Group {
+                        if updater.isChecking {
+                            Label("Checking…", systemImage: "arrow.trianglehead.2.clockwise")
+                        } else {
+                            Label("Check Updates", systemImage: "arrow.down.circle")
+                        }
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 7)
+                }
+                .buttonStyle(DarkButtonStyle(color: .blue.opacity(0.5)))
+                .disabled(updater.isChecking)
+
+                Button { NSApp.terminate(nil) } label: {
+                    Image(systemName: "power")
+                        .frame(width: 36, height: 32)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }.buttonStyle(.plain).foregroundStyle(.white)
+            }
+        }
+        .padding(20)
+    }
+
+    @ViewBuilder
+    func gridButton(icon: String, label: String, color: Color, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 20))
+                Text(label).font(.caption.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity, minHeight: 64)
+        }
+        .buttonStyle(GridButtonStyle(color: color, liquidGlass: liquidGlass))
+        .disabled(disabled)
+    }
+}
+
+// MARK: - Settings View
+
+struct SettingsView: View {
+    @ObservedObject var vm: WallpaperViewModel
+    @Binding var showingSettings: Bool
+    @AppStorage("liquidGlass") private var liquidGlass = false
+    @AppStorage("cursorRipple") private var cursorRipple = false
+    @AppStorage("cursorParticles") private var cursorParticles = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            HStack {
+                Button { showingSettings = false } label: {
+                    Image(systemName: "arrow.left").foregroundStyle(.white)
+                }.buttonStyle(.plain)
+                Text("Settings").foregroundStyle(.white).font(.headline)
+                Spacer()
+            }
+
+            ScrollView {
+                VStack(spacing: 10) {
+                    settingRow(title: "Liquid Glass UI", subtitle: "Requires macOS 26+", tint: .purple) {
+                        Toggle("", isOn: $liquidGlass).labelsHidden().toggleStyle(SwitchToggleStyle(tint: .purple))
+                    }
+
+                    Divider().background(Color.white.opacity(0.08))
+                    Text("Cursor Effects").font(.caption).foregroundStyle(.gray).frame(maxWidth: .infinity, alignment: .leading)
+
+                    settingRow(title: "Ripple Effect", subtitle: "Expanding rings on mouse move", tint: .cyan) {
+                        Toggle("", isOn: $cursorRipple).labelsHidden().toggleStyle(SwitchToggleStyle(tint: .cyan))
+                    }
+
+                    settingRow(title: "Particle Trail", subtitle: "Purple particles follow cursor", tint: .purple) {
+                        Toggle("", isOn: $cursorParticles).labelsHidden().toggleStyle(SwitchToggleStyle(tint: .purple))
+                    }
+                }
+            }
+            .onChange(of: cursorRipple) { _, _ in updateCursorEffects() }
+            .onChange(of: cursorParticles) { _, _ in updateCursorEffects() }
+
+            Spacer()
+        }
+        .padding(16)
+        .onAppear { updateCursorEffects() }
+    }
+
+    private func updateCursorEffects() {
+        if cursorRipple || cursorParticles {
+            CursorEffectWindow.shared.stop()
+            CursorEffectWindow.shared.start(ripple: cursorRipple, particles: cursorParticles)
+        } else {
+            CursorEffectWindow.shared.stop()
+        }
+    }
+
+    @ViewBuilder
+    func settingRow<C: View>(title: String, subtitle: String, tint: Color, @ViewBuilder control: () -> C) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).foregroundStyle(.white).font(.subheadline.weight(.medium))
+                Text(subtitle).foregroundStyle(.gray).font(.caption2)
+            }
+            Spacer()
+            control()
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - Collection View
+
+struct CollectionView: View {
+    @ObservedObject var vm: WallpaperViewModel
+    @Binding var showingCollection: Bool
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Button { showingCollection = false } label: {
+                    Image(systemName: "arrow.left").foregroundStyle(.white)
+                }.buttonStyle(.plain)
+                Text("Collection").foregroundStyle(.white).font(.headline)
+                Spacer()
+            }
+
+            if vm.savedWallpapers.isEmpty {
+                Spacer()
+                Text("No saved wallpapers yet.\nSave one from the main screen.")
+                    .multilineTextAlignment(.center).font(.caption).foregroundStyle(.gray)
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                        ForEach(vm.savedWallpapers, id: \.self) { url in
+                            VStack(spacing: 4) {
+                                ThumbnailView(url: url).frame(height: 75)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
                                 Text(url.lastPathComponent)
-                                    .foregroundStyle(.white)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                Spacer()
-                                Button {
-                                    vm.selectedURL = nil
-                                    vm.removeWallpaper()
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill").foregroundStyle(.gray)
-                                }.buttonStyle(.plain)
+                                    .font(.caption2).foregroundStyle(.white).lineLimit(1)
+                                HStack(spacing: 12) {
+                                    Button {
+                                        vm.selectFromCollection(url)
+                                        showingCollection = false
+                                    } label: {
+                                        Image(systemName: "play.fill").foregroundStyle(.green)
+                                    }.buttonStyle(.plain)
+                                    Button { vm.removeFromCollection(url) } label: {
+                                        Image(systemName: "trash").foregroundStyle(.red.opacity(0.7))
+                                    }.buttonStyle(.plain)
+                                }
                             }
-                            .padding(10)
-                            .background(Color.white.opacity(0.06))
+                            .padding(8)
+                            .background(Color.white.opacity(0.05))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
-
-                        Button { vm.browseForVideo() } label: {
-                            Label(vm.selectedURL == nil ? "Choose Video…" : "Change Video…",
-                                  systemImage: "folder.fill")
-                                .frame(maxWidth: .infinity).padding(.vertical, 9)
-                        }
-                        .buttonStyle(DarkButtonStyle(color: .purple))
                     }
-
-                    // Actions
-                    if vm.selectedURL != nil {
-                        VStack(spacing: 8) {
-                            Button {
-                                print("[UI] Save to Collection button pressed")
-                                vm.addCurrentToCollection()
-                            } label: {
-                                Label(vm.isCurrentInCollection() ? "Already in Collection" : "Save to Collection",
-                                      systemImage: vm.isCurrentInCollection() ? "checkmark.circle.fill" : "star.fill")
-                                    .frame(maxWidth: .infinity).padding(.vertical, 9)
-                            }
-                            .buttonStyle(DarkButtonStyle(color: vm.isCurrentInCollection() ? .gray : .yellow))
-                            .disabled(vm.isCurrentInCollection())
-
-                            Button { vm.applyWallpaper() } label: {
-                                Label(vm.isActive ? "Restart" : "Set as Wallpaper",
-                                      systemImage: vm.isActive ? "arrow.clockwise" : "desktopcomputer")
-                                    .frame(maxWidth: .infinity).padding(.vertical, 9)
-                            }.buttonStyle(DarkButtonStyle(color: .green))
-
-                            if vm.isActive {
-                                Button { vm.removeWallpaper() } label: {
-                                    Label("Remove Wallpaper", systemImage: "stop.circle")
-                                        .frame(maxWidth: .infinity).padding(.vertical, 9)
-                                }.buttonStyle(DarkButtonStyle(color: .red.opacity(0.8)))
-                            }
-                        }
-                    }
-
-                    // Status
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(vm.isActive ? Color.green : Color.gray)
-                            .frame(width: 7, height: 7)
-                        Text(vm.isActive ? "Wallpaper is active" : "No wallpaper set")
-                            .font(.caption).foregroundStyle(.gray)
-                    }
-
-                    Divider().background(Color.white.opacity(0.1))
-
-                    Button {
-                        Task {
-                            await updater.checkForUpdates()
-                        }
-                    } label: {
-                        Label("Check for Updates", systemImage: "arrow.down.circle")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(DarkButtonStyle(color: .blue.opacity(0.5)))
-                    Button { NSApp.terminate(nil) } label: {
-                        Label("Quit VideoWallpaper", systemImage: "power")
-                            .frame(maxWidth: .infinity).padding(.vertical, 8)
-                    }.buttonStyle(DarkButtonStyle(color: .white.opacity(0.15)))
                 }
             }
         }
-        .onAppear {
-            Task {
-                await updater.checkForUpdates()
+        .padding(16)
+    }
+}
+
+// MARK: - Thumbnail View
+
+struct ThumbnailView: View {
+    let url: URL
+    @State private var image: NSImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image).resizable().scaledToFill()
+            } else {
+                Color.gray.opacity(0.2).onAppear { generateThumbnail() }
             }
         }
-        .frame(width: 360, height: 480)
+    }
+
+    private func generateThumbnail() {
+        let asset = AVAsset(url: url)
+        let gen = AVAssetImageGenerator(asset: asset)
+        gen.appliesPreferredTrackTransform = true
+        DispatchQueue.global().async {
+            if let cg = try? gen.copyCGImage(at: .zero, actualTime: nil) {
+                let img = NSImage(cgImage: cg, size: .zero)
+                DispatchQueue.main.async { self.image = img }
+            }
+        }
     }
 }
 
@@ -287,15 +608,17 @@ struct ContentView: View {
 
 @MainActor
 class WallpaperViewModel: ObservableObject {
+    @Published var selectedURL: URL?
+    @Published var isActive: Bool = false
+    @Published var savedWallpapers: [URL] = []
+    @Published var playbackRate: Double = 1.0
+
+    init() { loadSaved() }
+
     func isCurrentInCollection() -> Bool {
         guard let url = selectedURL else { return false }
         return savedWallpapers.contains(url)
     }
-    @Published var selectedURL: URL?
-    @Published var isActive: Bool = false
-    @Published var savedWallpapers: [URL] = []
-
-    init() { loadSaved() }
 
     func browseForVideo() {
         let panel = NSOpenPanel()
@@ -311,7 +634,8 @@ class WallpaperViewModel: ObservableObject {
 
     func applyWallpaper() {
         guard let url = selectedURL else { return }
-        Task { await WallpaperWindowController.shared.setVideo(url: url) }
+        let rate = Float(playbackRate)
+        Task { await WallpaperWindowController.shared.setVideo(url: url, rate: rate) }
         isActive = true
     }
 
@@ -321,177 +645,60 @@ class WallpaperViewModel: ObservableObject {
     }
 
     func addCurrentToCollection() {
-        print("[Collection] Attempting to add current URL")
-
-        guard let url = selectedURL else {
-            print("[Collection] No selectedURL — cannot save")
-            return
-        }
-
-        print("[Collection] Selected URL: \(url.path)")
-
-        if !savedWallpapers.contains(url) {
-            savedWallpapers.append(url)
-            print("[Collection] Appended. New count: \(savedWallpapers.count)")
-            saveList()
-        } else {
-            print("[Collection] Already exists: \(url.lastPathComponent)")
-        }
+        guard let url = selectedURL, !savedWallpapers.contains(url) else { return }
+        savedWallpapers.append(url)
+        saveList()
     }
 
     func removeFromCollection(_ url: URL) {
-        print("[Collection] Removing: \(url.lastPathComponent)")
         savedWallpapers.removeAll { $0 == url }
-        print("[Collection] Count after removal: \(savedWallpapers.count)")
         saveList()
     }
 
     func selectFromCollection(_ url: URL) {
-        print("[Collection] Selected from collection: \(url.lastPathComponent)")
         selectedURL = url
         applyWallpaper()
     }
 
     private func saveList() {
-        let paths = savedWallpapers.map { $0.path }
-        print("[Collection] Saving paths: \(paths)")
-        UserDefaults.standard.set(paths, forKey: "savedWallpaperPaths")
+        UserDefaults.standard.set(savedWallpapers.map { $0.path }, forKey: "savedWallpaperPaths")
     }
 
     private func loadSaved() {
         let paths = UserDefaults.standard.stringArray(forKey: "savedWallpaperPaths") ?? []
-        print("[Collection] Loaded raw paths: \(paths)")
-
         savedWallpapers = paths.compactMap { path -> URL? in
-            let exists = FileManager.default.fileExists(atPath: path)
-            print("[Collection] Checking path: \(path) exists: \(exists)")
-            return exists ? URL(fileURLWithPath: path) : nil
+            let url = URL(fileURLWithPath: path)
+            return FileManager.default.fileExists(atPath: path) ? url : nil
         }
-
-        print("[Collection] Final loaded URLs count: \(savedWallpapers.count)")
     }
 }
 
-struct CollectionView: View {
-    @ObservedObject var vm: WallpaperViewModel
-    @Binding var showingCollection: Bool
+// MARK: - Button Styles
 
-    var body: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Button {
-                    showingCollection = false
-                } label: {
-                    Image(systemName: "arrow.left")
-                }
-                .buttonStyle(.plain)
+struct GridButtonStyle: ButtonStyle {
+    var color: Color
+    var liquidGlass: Bool
 
-                Text("Collection")
-                    .foregroundStyle(.white)
-                    .font(.headline)
-
-                Spacer()
-            }
-
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    ForEach(vm.savedWallpapers, id: \.self) { url in
-                        VStack {
-                            ThumbnailView(url: url)
-                                .frame(height: 80)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                            Text(url.lastPathComponent)
-                                .font(.caption2)
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-
-                            HStack {
-                                Button {
-                                    vm.selectFromCollection(url)
-                                    showingCollection = false
-                                } label: {
-                                    Image(systemName: "play.fill")
-                                }
-                                .buttonStyle(.plain)
-
-                                Button {
-                                    vm.removeFromCollection(url)
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(6)
-                        .background(Color.white.opacity(0.05))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .background(
+                Group {
+                    if liquidGlass, #available(macOS 26, *) {
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(.clear)
+                            .glassEffect(in: .rect(cornerRadius: 14))
+                    } else {
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(color.opacity(configuration.isPressed ? 0.35 : 0.22))
+                            .overlay(RoundedRectangle(cornerRadius: 14)
+                                .stroke(color.opacity(0.5), lineWidth: 1))
                     }
                 }
-            }
-        }
-        .padding(16)
-    }
-}
-
-struct ThumbnailView: View {
-    let url: URL
-    @State private var image: NSImage?
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Color.gray.opacity(0.2)
-                    .onAppear { generateThumbnail() }
-            }
-        }
-    }
-
-    private func generateThumbnail() {
-        let asset = AVAsset(url: url)
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-
-        DispatchQueue.global().async {
-            if let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) {
-                let nsImage = NSImage(cgImage: cgImage, size: .zero)
-                DispatchQueue.main.async {
-                    self.image = nsImage
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Button Style
-
-struct HoverGlowButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HoverGlow(configuration: configuration)
-    }
-
-    struct HoverGlow: View {
-        let configuration: Configuration
-        @State private var hovering = false
-
-        var body: some View {
-            configuration.label
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.white.opacity(configuration.isPressed ? 0.1 : 0.05))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(hovering ? Color.purple : Color.white.opacity(0.25), lineWidth: 1.2)
-                        .shadow(color: hovering ? Color.purple.opacity(0.6) : .clear, radius: 8)
-                )
-                .scaleEffect(configuration.isPressed ? 0.95 : 1)
-                .onHover { hovering = $0 }
-        }
+            )
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
