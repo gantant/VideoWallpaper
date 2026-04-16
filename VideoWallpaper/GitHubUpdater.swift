@@ -166,28 +166,41 @@ final class GitHubUpdater: NSObject, ObservableObject {
 
             print("[Updater] Found app bundle:", appBundle.lastPathComponent)
 
+            let fileManager = FileManager.default
+
             let destination = URL(fileURLWithPath: "/Applications")
                 .appendingPathComponent(appBundle.lastPathComponent)
 
-            try? FileManager.default.removeItem(at: destination)
-            try FileManager.default.copyItem(at: appBundle, to: destination)
+            let appName = appBundle.lastPathComponent
+            let sourcePath = appBundle.path
+            let destinationPath = destination.path
 
-            print("[Updater] Installed to:", destination.path)
-            notify(title: "Update Installed – v\(version)",
-                   body: "Relaunching VideoWallpaper…")
+            print("[Updater] Scheduling external install task")
 
-            // Small delay so the notification can fire before relaunch
-            try await Task.sleep(nanoseconds: 1_500_000_000)
+            let script = """
+            while pgrep -x "\(appName.replacingOccurrences(of: ".app", with: ""))" > /dev/null; do
+                sleep 0.5
+            done
 
-            NSWorkspace.shared.openApplication(
-                at: destination,
-                configuration: NSWorkspace.OpenConfiguration()
-            ) { _, _ in }
+            rm -rf "\(destinationPath)"
+            cp -R "\(sourcePath)" "\(destinationPath)"
+            open "\(destinationPath)"
+            """
 
-            // Quit the old instance after handing off
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                NSApp.terminate(nil)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = ["-c", script]
+
+            do {
+                try process.run()
+            } catch {
+                print("[Updater] Failed to launch installer process:", error)
+                notify(title: "Update Failed", body: error.localizedDescription)
+                return
             }
+
+            print("[Updater] Installer process launched")
+            return
 
         } catch {
             print("[Updater] Install failed:", error)
