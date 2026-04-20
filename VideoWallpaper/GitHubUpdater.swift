@@ -13,6 +13,7 @@ import Combine
 
 @MainActor
 final class GitHubUpdater: NSObject, ObservableObject {
+    nonisolated let objectWillChange = ObservableObjectPublisher()
 
     @Published var isChecking = false
 
