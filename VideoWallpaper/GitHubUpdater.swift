@@ -19,6 +19,12 @@ final class GitHubUpdater: NSObject, ObservableObject {
 
     // ── Change this to your actual GitHub repo ──
     private let repo = "gantant/VideoWallpaper"
+    private enum DiagnosticsKey {
+        static let lastCheck = "updater.lastCheckISO8601"
+        static let status = "updater.status"
+        static let latest = "updater.latestVersion"
+        static let detail = "updater.detail"
+    }
 
     override init() {
         super.init()
@@ -36,40 +42,36 @@ final class GitHubUpdater: NSObject, ObservableObject {
         guard !isChecking else { return }
         isChecking = true
         defer { isChecking = false }
+        persistDiagnostic(status: "Checking…", latest: nil, detail: "Contacting GitHub")
 
-        guard let apiURL = URL(string: "https://api.github.com/repos/\(repo)/releases/latest") else {
+        guard let releasesURL = URL(string: "https://api.github.com/repos/\(repo)/releases"),
+              let tagsURL = URL(string: "https://api.github.com/repos/\(repo)/tags") else {
             print("[Updater] Bad repo URL")
             return
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: apiURL)
-
-            // Surface HTTP errors clearly
-            if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-                print("[Updater] GitHub API returned HTTP \(http.statusCode)")
-                if showNoUpdateAlert { notify(title: "Update Check Failed",
-                                              body: "GitHub returned HTTP \(http.statusCode).") }
+            var resolved = try await fetchBestRelease(from: releasesURL)
+            if resolved == nil {
+                resolved = try await fetchTagFallback(from: tagsURL)
+            }
+            guard let release = resolved else {
+                persistDiagnostic(status: "Failed", latest: nil, detail: "No releases or tags found")
+                if showNoUpdateAlert {
+                    notify(title: "Update Check Failed", body: "No releases or tags found in the repository.")
+                }
                 return
             }
 
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                print("[Updater] Could not parse JSON")
-                return
-            }
-
-            guard let rawTag  = json["tag_name"] as? String,
-                  let htmlURL = json["html_url"]  as? String else {
-                print("[Updater] Missing tag_name or html_url in response")
-                return
-            }
-
+            let rawTag = release.tag
+            let htmlURL = release.htmlURL
             let latest  = normalize(rawTag)
             let current = normalize(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0")
             print("[Updater] Current: \(current)  Latest: \(latest)")
 
             guard isNewer(latest: latest, current: current) else {
                 print("[Updater] Already up to date")
+                persistDiagnostic(status: "Up to date", latest: latest, detail: "Current \(current)")
                 if showNoUpdateAlert {
                     notify(title: "You're up to date 🎉",
                            body: "Version \(current) is the latest release.")
@@ -78,16 +80,14 @@ final class GitHubUpdater: NSObject, ObservableObject {
             }
 
             print("[Updater] New version available: \(latest)")
+            persistDiagnostic(status: "Update available", latest: latest, detail: "Current \(current)")
 
             // Look for a .zip asset to auto-install
-            if let assets    = json["assets"]   as? [[String: Any]],
-               let zipAsset  = assets.first(where: { ($0["name"] as? String)?.hasSuffix(".zip") == true }),
-               let dlString  = zipAsset["browser_download_url"] as? String,
-               let dlURL     = URL(string: dlString) {
+            if let downloadURL = release.zipAssetURL {
 
                 notify(title: "Update Available – v\(latest)",
                        body: "Downloading and installing now…")
-                await downloadAndInstall(from: dlURL, version: latest)
+                await downloadAndInstall(from: downloadURL, version: latest)
 
             } else {
                 // Fallback: open release page
@@ -101,6 +101,7 @@ final class GitHubUpdater: NSObject, ObservableObject {
 
         } catch {
             print("[Updater] Network/parse error:", error)
+            persistDiagnostic(status: "Failed", latest: nil, detail: error.localizedDescription)
             if showNoUpdateAlert {
                 notify(title: "Update Check Failed", body: error.localizedDescription)
             }
@@ -113,6 +114,58 @@ final class GitHubUpdater: NSObject, ObservableObject {
         v.trimmingCharacters(in: .whitespacesAndNewlines)
          .replacingOccurrences(of: "v", with: "")
          .replacingOccurrences(of: "V", with: "")
+    }
+
+    private struct ReleaseInfo {
+        let tag: String
+        let htmlURL: String
+        let zipAssetURL: URL?
+    }
+
+    private func githubJSON(from url: URL) async throws -> Any {
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 20
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.setValue("VideoWallpaper-Updater", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: req)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw NSError(domain: "GitHubUpdater", code: http.statusCode, userInfo: [
+                NSLocalizedDescriptionKey: "GitHub returned HTTP \(http.statusCode)."
+            ])
+        }
+        return try JSONSerialization.jsonObject(with: data)
+    }
+
+    private func fetchBestRelease(from url: URL) async throws -> ReleaseInfo? {
+        guard let releases = try await githubJSON(from: url) as? [[String: Any]] else { return nil }
+        guard let best = releases.first(where: { ($0["draft"] as? Bool) != true && ($0["prerelease"] as? Bool) != true }) else {
+            return nil
+        }
+        guard let tag = best["tag_name"] as? String,
+              let html = best["html_url"] as? String else { return nil }
+        let zip: URL? = ((best["assets"] as? [[String: Any]])?
+            .first(where: { ($0["name"] as? String)?.hasSuffix(".zip") == true })?["browser_download_url"] as? String)
+            .flatMap(URL.init(string:))
+        return ReleaseInfo(tag: tag, htmlURL: html, zipAssetURL: zip)
+    }
+
+    private func fetchTagFallback(from url: URL) async throws -> ReleaseInfo? {
+        guard
+            let tags = try await githubJSON(from: url) as? [[String: Any]],
+            let first = tags.first,
+            let name = first["name"] as? String
+        else { return nil }
+
+        let html = "https://github.com/\(repo)/releases"
+        return ReleaseInfo(tag: name, htmlURL: html, zipAssetURL: nil)
+    }
+
+    private func persistDiagnostic(status: String, latest: String?, detail: String) {
+        let defaults = UserDefaults.standard
+        defaults.set(ISO8601DateFormatter().string(from: Date()), forKey: DiagnosticsKey.lastCheck)
+        defaults.set(status, forKey: DiagnosticsKey.status)
+        defaults.set(latest, forKey: DiagnosticsKey.latest)
+        defaults.set(detail, forKey: DiagnosticsKey.detail)
     }
 
     private func isNewer(latest: String, current: String) -> Bool {
@@ -167,14 +220,17 @@ final class GitHubUpdater: NSObject, ObservableObject {
 
             print("[Updater] Found app bundle:", appBundle.lastPathComponent)
 
-            _ = FileManager.default
-
             let destination = URL(fileURLWithPath: "/Applications")
                 .appendingPathComponent(appBundle.lastPathComponent)
+            let userDestination = FileManager.default.urls(for: .applicationDirectory, in: .userDomainMask)
+                .first?
+                .appendingPathComponent(appBundle.lastPathComponent)
+                ?? destination
 
             let appName = appBundle.lastPathComponent
             let sourcePath = appBundle.path
             let destinationPath = destination.path
+            let userDestinationPath = userDestination.path
 
             print("[Updater] Scheduling external install task")
 
@@ -183,9 +239,15 @@ final class GitHubUpdater: NSObject, ObservableObject {
                 sleep 0.5
             done
 
-            rm -rf "\(destinationPath)"
-            cp -R "\(sourcePath)" "\(destinationPath)"
-            open "\(destinationPath)"
+            if rm -rf "\(destinationPath)" && cp -R "\(sourcePath)" "\(destinationPath)"; then
+                open "\(destinationPath)"
+                exit 0
+            fi
+
+            mkdir -p "$HOME/Applications"
+            rm -rf "\(userDestinationPath)"
+            cp -R "\(sourcePath)" "\(userDestinationPath)"
+            open "\(userDestinationPath)"
             """
 
             let process = Process()
@@ -194,8 +256,10 @@ final class GitHubUpdater: NSObject, ObservableObject {
 
             do {
                 try process.run()
+                persistDiagnostic(status: "Install launched", latest: version, detail: "Installer process started")
             } catch {
                 print("[Updater] Failed to launch installer process:", error)
+                persistDiagnostic(status: "Install failed", latest: version, detail: error.localizedDescription)
                 notify(title: "Update Failed", body: error.localizedDescription)
                 return
             }
@@ -205,6 +269,7 @@ final class GitHubUpdater: NSObject, ObservableObject {
 
         } catch {
             print("[Updater] Install failed:", error)
+            persistDiagnostic(status: "Install failed", latest: version, detail: error.localizedDescription)
             notify(title: "Update Failed", body: error.localizedDescription)
         }
     }

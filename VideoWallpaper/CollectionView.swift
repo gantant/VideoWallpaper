@@ -15,13 +15,13 @@ import SwiftUI
 struct CollectionView: View {
     @ObservedObject var vm: WallpaperViewModel
     @Binding var showingCollection: Bool
+    @AppStorage("liquidGlass") private var liquidGlass = false
+    @AppStorage("accentHex") private var accentHex: String = "8B5CF6"
 
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Button { showingCollection = false } label: {
-                    Image(systemName: "arrow.left").foregroundStyle(.white)
-                }.buttonStyle(.plain)
+                BackNavigationButton(title: "Back") { showingCollection = false }
                 Text("My Library").foregroundStyle(.white).font(.headline)
                 Spacer()
                 if !vm.savedWallpapers.isEmpty {
@@ -58,6 +58,15 @@ struct CollectionView: View {
             }
         }
         .padding(16)
+        .background(
+            Group {
+                if liquidGlass, #available(macOS 26, *) {
+                    Color.clear
+                } else {
+                    Color(red: 0.08, green: 0.08, blue: 0.10)
+                }
+            }
+        )
     }
 }
 
@@ -74,6 +83,7 @@ struct CollectionItemView: View {
 
     var isFav: Bool { vm.isFavorited(url) }
     @AppStorage("accentHex") private var accentHex: String = "8B5CF6"
+    @AppStorage("liquidGlass") private var liquidGlass = false
 
     var body: some View {
         VStack(spacing: 4) {
@@ -137,8 +147,7 @@ struct CollectionItemView: View {
             }
         }
         .padding(8)
-        .background(Color.white.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(LiquidCardBackground(cornerRadius: 8, tint: Color(hex: accentHex), liquidGlass: liquidGlass))
         .overlay(
             ZStack {
                 if isFav {
@@ -147,7 +156,7 @@ struct CollectionItemView: View {
                 }
                 if vm.selectedURL == url {
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.purple.opacity(0.5), lineWidth: 2)
+                        .stroke(Color(hex: accentHex).opacity(0.6), lineWidth: 2)
                 }
             }
         )

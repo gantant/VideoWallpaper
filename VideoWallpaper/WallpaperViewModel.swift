@@ -17,7 +17,16 @@ class WallpaperViewModel: ObservableObject {
     @Published var savedWallpapers: [URL] = [] { willSet { objectWillChange.send() } }
     @Published var favoritedURLs: Set<URL> = [] { willSet { objectWillChange.send() } }
 
-    init() { loadSaved() }
+    init() {
+        loadSaved()
+        if !savedWallpapers.isEmpty {
+            UserDefaults.standard.set(true, forKey: "hasEverChosenVideo")
+        }
+    }
+
+    private func markHasChosenVideo() {
+        UserDefaults.standard.set(true, forKey: "hasEverChosenVideo")
+    }
 
     // MARK: - Queries
 
@@ -60,6 +69,7 @@ class WallpaperViewModel: ObservableObject {
 
     func applyWallpaper() {
         guard let url = selectedURL else { return }
+        markHasChosenVideo()
         let rate = Float(playbackRate)
         let fade = UserDefaults.standard.object(forKey: "fadeTransition") as? Bool ?? true
         Task { await WallpaperWindowController.shared.setVideo(url: url, rate: rate, fade: fade) }
@@ -112,6 +122,13 @@ class WallpaperViewModel: ObservableObject {
     func stopRotation() {
         WallpaperWindowController.shared.stopRotation()
         isRotating = false
+    }
+
+    func shuffleAndApplyFromLibrary() {
+        let candidates = savedWallpapers.filter { $0 != selectedURL }
+        guard let pick = candidates.randomElement() else { return }
+        selectedURL = pick
+        applyWallpaper()
     }
 
     // MARK: - Persistence

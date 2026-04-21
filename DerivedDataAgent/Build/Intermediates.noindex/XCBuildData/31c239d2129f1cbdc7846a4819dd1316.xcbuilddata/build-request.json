@@ -1,0 +1,64 @@
+{
+  "buildCommand" : {
+    "command" : "build",
+    "skipDependencies" : false,
+    "style" : "buildOnly"
+  },
+  "configuredTargets" : [
+    {
+      "guid" : "643fd9767f3817db4e8a91233311558fb32b8b2272988a05551a24f287a9fd4d"
+    }
+  ],
+  "containerPath" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/VideoWallpaper.xcodeproj",
+  "continueBuildingAfterErrors" : false,
+  "dependencyScope" : "workspace",
+  "enableIndexBuildArena" : false,
+  "hideShellScriptEnvironment" : false,
+  "parameters" : {
+    "action" : "build",
+    "activeArchitecture" : "arm64",
+    "activeRunDestination" : {
+      "disableOnlyActiveArch" : false,
+      "platform" : "macosx",
+      "sdk" : "macosx26.0",
+      "sdkVariant" : "macos",
+      "supportedArchitectures" : [
+        "arm64e",
+        "arm64",
+        "x86_64"
+      ],
+      "targetArchitecture" : "arm64"
+    },
+    "arenaInfo" : {
+      "buildIntermediatesPath" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgent/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgent/Build/Products",
+      "derivedDataPath" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgent",
+      "indexDataStoreFolderPath" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgent/Index.noindex/DataStore",
+      "indexEnableDataStore" : true,
+      "indexPCHPath" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgent/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgent/Build/Intermediates.noindex/PrecompiledHeaders"
+    },
+    "configurationName" : "Debug",
+    "overrides" : {
+      "commandLine" : {
+        "table" : {
+
+        }
+      },
+      "synthesized" : {
+        "table" : {
+          "ACTION" : "build",
+          "ENABLE_PREVIEWS" : "NO",
+          "ENABLE_XOJIT_PREVIEWS" : "YES",
+          "ONLY_ACTIVE_ARCH" : "YES"
+        }
+      }
+    }
+  },
+  "schemeCommand" : "launch",
+  "showNonLoggedProgress" : true,
+  "useDryRun" : false,
+  "useImplicitDependencies" : true,
+  "useLegacyBuildLocations" : false,
+  "useParallelTargets" : true
+}

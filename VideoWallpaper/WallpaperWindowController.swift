@@ -101,7 +101,7 @@ class WallpaperWindowController: NSObject {
             screen: screen
         )
         win.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
-        win.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        win.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         win.isOpaque = true
         win.hasShadow = false
         win.contentView = pv
@@ -129,6 +129,10 @@ class WallpaperWindowController: NSObject {
 
         let did = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0
         slots.append(ScreenSlot(window: win, player: player, looper: looper, obs: obs, displayID: did))
+
+        DispatchQueue.main.async {
+            NowPlayingHUDController.shared.orderAboveWallpaperIfNeeded()
+        }
     }
 
     // MARK: - Screen changes
@@ -190,12 +194,15 @@ class WallpaperWindowController: NSObject {
         rotationURLs = urls
         rotationIndex = 0
         let fade = UserDefaults.standard.object(forKey: "fadeTransition") as? Bool ?? true
-        rotationTimer = Timer.scheduledTimer(withTimeInterval: intervalSeconds, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: intervalSeconds, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.rotationIndex = (self.rotationIndex + 1) % self.rotationURLs.count
             let url = self.rotationURLs[self.rotationIndex]
             Task { await self.setVideo(url: url, rate: self.currentRate, fade: fade) }
         }
+        t.tolerance = min(intervalSeconds * 0.2, 5)
+        RunLoop.main.add(t, forMode: .common)
+        rotationTimer = t
     }
 
     func stopRotation() {

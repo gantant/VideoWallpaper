@@ -9,7 +9,7 @@
 // ============================================================
 // CursorEffectWindow.swift
 // Transparent overlay window for ripple + particle effects.
-// Optimised: 30 fps, particle cap, dirty-rect only redraws.
+// Optimised: 24 fps, tight caps, union(visibleFrame) backing (not full screen.frame), dirty-rect redraws.
 // ============================================================
 
 import AppKit
@@ -17,6 +17,12 @@ import AppKit
 class CursorEffectWindow: NSWindow {
     static let shared = CursorEffectWindow()
     private var effectView: CursorEffectView?
+    private var observers: [Any] = []
+
+    /// Smaller than `union(screen.frame)` — avoids a huge transparent backing store on multi-monitor setups.
+    private static func unionVisibleFrames() -> CGRect {
+        NSScreen.screens.reduce(CGRect.null) { $0.union($1.visibleFrame) }
+    }
 
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -26,11 +32,12 @@ class CursorEffectWindow: NSWindow {
         backgroundColor = .clear
         hasShadow = false
         ignoresMouseEvents = true
+        setupObservers()
     }
 
     func start(ripple: Bool, particles: Bool) {
         guard !NSScreen.screens.isEmpty else { return }
-        let frame = NSScreen.screens.reduce(CGRect.null) { $0.union($1.frame) }
+        let frame = Self.unionVisibleFrames()
         setFrame(frame, display: true)
         let v = CursorEffectView(ripple: ripple, particles: particles)
         contentView = v
@@ -44,6 +51,22 @@ class CursorEffectWindow: NSWindow {
         orderOut(nil)
         effectView = nil
     }
+
+    private func setupObservers() {
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.setFrame(Self.unionVisibleFrames(), display: true)
+        })
+    }
+
+    deinit {
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+    }
 }
 
 class CursorEffectView: NSView {
@@ -53,7 +76,10 @@ class CursorEffectView: NSView {
     private var particles: [(pos: CGPoint, vel: CGPoint, age: CGFloat)] = []
     private var lastMousePos: CGPoint = .zero
     private var renderTimer: Timer?
-    private var frameCount = 0
+    /// Padding around ripples/particles for stroke/glow; also used when expanding erase rects.
+    private let effectPad: CGFloat = 56
+    /// Previous frame’s effect bounds so the next redraw clears trails as ripples expand/move.
+    private var prevEffectDirty: CGRect = .null
 
     init(ripple: Bool, particles: Bool) {
         self.rippleEnabled = ripple
@@ -65,10 +91,14 @@ class CursorEffectView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     func startTracking() {
-        // 30 fps — halves GPU pressure vs 60 fps
-        renderTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+        // 24 fps + tolerance + common run loop: smooth enough, coalesces with scrolling/event tracking.
+        let interval = 1.0 / 24.0
+        let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             self?.tick()
         }
+        t.tolerance = interval * 0.35
+        RunLoop.main.add(t, forMode: .common)
+        renderTimer = t
     }
 
     func stopTracking() {
@@ -83,10 +113,10 @@ class CursorEffectView: NSView {
         if moved {
             if rippleEnabled {
                 ripples.append((mouse, 0))
+                while ripples.count > 6 { ripples.removeFirst() }
             }
             if particlesEnabled {
-                // Cap at 40 total, add max 2 per tick
-                let toAdd = min(2, max(0, 40 - particles.count))
+                let toAdd = min(1, max(0, 18 - particles.count))
                 for _ in 0..<toAdd {
                     particles.append((
                         mouse,
@@ -107,23 +137,43 @@ class CursorEffectView: NSView {
             return a < 1 ? (np, p.vel, a) : nil
         }
 
-        if !ripples.isEmpty || !particles.isEmpty {
-            setNeedsDisplay(bounds)
-        } else if frameCount % 30 == 0 {
-            // Periodic clear to avoid stale pixels
-            setNeedsDisplay(bounds)
+        var effectBB = CGRect.null
+        for r in ripples {
+            let rad = r.age * 50 + 6
+            effectBB = effectBB.union(CGRect(x: r.pos.x - rad, y: r.pos.y - rad, width: rad * 2, height: rad * 2))
         }
-        frameCount += 1
+        for p in particles {
+            let sz = (1 - p.age) * 3.5 + 4
+            effectBB = effectBB.union(CGRect(x: p.pos.x - sz, y: p.pos.y - sz, width: sz * 2, height: sz * 2))
+        }
+
+        let hasEffects = !ripples.isEmpty || !particles.isEmpty
+        if hasEffects {
+            let d = effectBB.isNull ? bounds : effectBB.insetBy(dx: -effectPad, dy: -effectPad).intersection(bounds)
+            let inv = prevEffectDirty.isNull ? d : d.union(prevEffectDirty)
+            if !inv.isNull && !inv.isEmpty {
+                setNeedsDisplay(inv)
+            }
+            prevEffectDirty = d
+        } else {
+            if !prevEffectDirty.isNull && !prevEffectDirty.isEmpty {
+                let erase = prevEffectDirty.insetBy(dx: -effectPad, dy: -effectPad).intersection(bounds)
+                setNeedsDisplay(erase)
+            }
+            prevEffectDirty = .null
+        }
     }
 
     private func convertFromScreen(_ pt: CGPoint) -> CGPoint {
-        guard let s = NSScreen.main else { return pt }
-        return CGPoint(x: pt.x - s.frame.minX, y: pt.y - s.frame.minY)
+        let origin = frame.origin
+        return CGPoint(x: pt.x - origin.x, y: pt.y - origin.y)
     }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.clear(bounds)
+        ctx.saveGState()
+        ctx.clip(to: dirtyRect)
+        ctx.clear(dirtyRect)
 
         for r in ripples {
             let rad = r.age * 50
@@ -145,5 +195,6 @@ class CursorEffectView: NSView {
                 width: sz, height: sz
             ))
         }
+        ctx.restoreGState()
     }
 }

@@ -1,0 +1,1 @@
+@rpath/VideoWallpaper.debug.dylib

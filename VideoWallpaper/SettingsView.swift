@@ -50,15 +50,28 @@ private let accentPresets: [(name: String, hex: String)] = [
 struct SettingsView: View {
     @ObservedObject var vm: WallpaperViewModel
     @Binding var showingSettings: Bool
+    @StateObject private var updater = GitHubUpdater()
 
     @AppStorage("liquidGlass")      private var liquidGlass:     Bool   = false
     @AppStorage("fadeTransition")   private var fadeTransition:  Bool   = true
     @AppStorage("autoRestore")      private var autoRestore:     Bool   = false
     @AppStorage("cursorRipple")     private var cursorRipple:    Bool   = false
     @AppStorage("cursorParticles")  private var cursorParticles: Bool   = false
+    @AppStorage("buttonRippleFX")   private var buttonRippleFX:  Bool   = false
+    @AppStorage("nowPlayingHUDEnabled") private var nowPlayingHUDEnabled: Bool = false
+    @AppStorage("nowPlayingIncludeSpotify") private var nowPlayingIncludeSpotify: Bool = true
+    @AppStorage("nowPlayingEdge") private var nowPlayingEdge: String = "trailing"
+    @AppStorage("nowPlayingVerticalPosition") private var nowPlayingVerticalPosition: String = "high"
+    @AppStorage("nowPlayingHUDStyle") private var nowPlayingHUDStyle: String = "artBlur"
+    @AppStorage("nowPlayingFullScreen") private var nowPlayingFullScreen: Bool = false
+    @AppStorage("nowPlayingPollSeconds") private var nowPlayingPollSeconds: Double = 1.2
     @AppStorage("fpsCap")           private var fpsCap:          Int    = 0
     @AppStorage("rotationInterval") private var rotationInterval: Double = 5
     @AppStorage("accentHex")        private var accentHex:       String = "8B5CF6"
+    @AppStorage("updater.lastCheckISO8601") private var updaterLastCheck = ""
+    @AppStorage("updater.status") private var updaterStatus = "Never run"
+    @AppStorage("updater.latestVersion") private var updaterLatest = ""
+    @AppStorage("updater.detail") private var updaterDetail = ""
 
     @State private var rotationSelected: Set<URL> = []
 
@@ -68,13 +81,11 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             // Nav bar
             HStack {
-                Button { showingSettings = false } label: {
-                    Image(systemName: "arrow.left").foregroundStyle(.white)
-                }.buttonStyle(.plain)
+                BackNavigationButton(title: "Back") { showingSettings = false }
                 Text("Settings").foregroundStyle(.white).font(.headline)
                 Spacer()
             }
-            .padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 10)
+            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
 
             ScrollView {
                 VStack(spacing: 10) {
@@ -104,8 +115,8 @@ struct SettingsView: View {
                         Text("Applied to buttons, sliders, and highlights.")
                             .font(.caption2).foregroundStyle(.gray)
                     }
-                    .padding(12).background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(12)
+                    .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
 
                     // MARK: Interface
                     sectionHeader("Interface")
@@ -119,6 +130,10 @@ struct SettingsView: View {
                     }
                     settingRow(title: "Restore on Launch", subtitle: "Re-apply last wallpaper at startup") {
                         Toggle("", isOn: $autoRestore).labelsHidden()
+                            .toggleStyle(SwitchToggleStyle(tint: accent))
+                    }
+                    settingRow(title: "Button Ripple FX", subtitle: "Glow and radial pulse on button taps") {
+                        Toggle("", isOn: $buttonRippleFX).labelsHidden()
                             .toggleStyle(SwitchToggleStyle(tint: accent))
                     }
 
@@ -154,8 +169,8 @@ struct SettingsView: View {
                             }
                         }
                     }
-                    .padding(12).background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(12)
+                    .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
 
                     // MARK: FPS Cap
                     sectionHeader("FPS Cap")
@@ -183,8 +198,8 @@ struct SettingsView: View {
                         Text("Takes effect next time you set a wallpaper.")
                             .font(.caption2).foregroundStyle(.gray)
                     }
-                    .padding(12).background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(12)
+                    .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
 
                     // MARK: Rotation
                     sectionHeader("Auto-Rotation")
@@ -232,7 +247,7 @@ struct SettingsView: View {
                                 Button { vm.stopRotation() } label: {
                                     Label("Stop Rotation", systemImage: "stop.circle")
                                         .frame(maxWidth: .infinity).padding(.vertical, 8)
-                                }.buttonStyle(DarkButtonStyle(color: .red.opacity(0.7)))
+                                }.buttonStyle(DarkButtonStyle(color: .red.opacity(0.7), liquidGlass: liquidGlass))
                             } else {
                                 Button {
                                     let urls = vm.savedWallpapers.filter { rotationSelected.contains($0) }
@@ -242,7 +257,7 @@ struct SettingsView: View {
                                     Label("Start Rotation", systemImage: "play.fill")
                                         .frame(maxWidth: .infinity).padding(.vertical, 8)
                                 }
-                                .buttonStyle(DarkButtonStyle(color: accent))
+                                .buttonStyle(DarkButtonStyle(color: accent, liquidGlass: liquidGlass))
                                 .disabled(rotationSelected.count < 2)
                                 if rotationSelected.count < 2 {
                                     Text("Select at least 2 videos.")
@@ -251,8 +266,8 @@ struct SettingsView: View {
                             }
                         }
                     }
-                    .padding(12).background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(12)
+                    .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
 
                     // MARK: Cursor Effects
                     sectionHeader("Cursor Effects")
@@ -263,6 +278,78 @@ struct SettingsView: View {
                     settingRow(title: "Particle Trail", subtitle: "Particles follow your cursor") {
                         Toggle("", isOn: $cursorParticles).labelsHidden()
                             .toggleStyle(SwitchToggleStyle(tint: accent))
+                    }
+
+                    // MARK: Now Playing HUD
+                    sectionHeader("Now Playing HUD")
+                    VStack(alignment: .leading, spacing: 8) {
+                        settingRow(title: "Show music strip", subtitle: "Black notch on the edge — hover to peek, click to open, drag to move (Music / Spotify; Automation access)") {
+                            Toggle("", isOn: $nowPlayingHUDEnabled).labelsHidden()
+                                .toggleStyle(SwitchToggleStyle(tint: accent))
+                        }
+                        settingRow(title: "Include Spotify", subtitle: "Off = Apple Music only; skips Spotify AppleScript (no Spotify app prompts)") {
+                            Toggle("", isOn: $nowPlayingIncludeSpotify).labelsHidden()
+                                .toggleStyle(SwitchToggleStyle(tint: accent))
+                        }
+                        HStack {
+                            Text("Edge").font(.caption).foregroundStyle(.gray)
+                            Spacer()
+                            Picker("", selection: $nowPlayingEdge) {
+                                Text("Left").tag("leading")
+                                Text("Right").tag("trailing")
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .frame(width: 160)
+                        }
+                        .padding(12)
+                        .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
+                        HStack {
+                            Text("Vertical").font(.caption).foregroundStyle(.gray)
+                            Spacer()
+                            Picker("", selection: $nowPlayingVerticalPosition) {
+                                Text("Top").tag("high")
+                                Text("Center").tag("center")
+                                Text("Bottom").tag("low")
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .frame(maxWidth: 220)
+                        }
+                        .padding(12)
+                        .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
+                        HStack {
+                            Text("Background").font(.caption).foregroundStyle(.gray)
+                            Spacer()
+                            Picker("", selection: $nowPlayingHUDStyle) {
+                                Text("Art blur").tag("artBlur")
+                                Text("Glass").tag("glass")
+                                Text("None (transparent)").tag("none")
+                            }
+                            .labelsHidden()
+                            .frame(width: 140)
+                        }
+                        .padding(12)
+                        .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
+                        settingRow(title: "Show in fullscreen spaces", subtitle: "May be blocked by some full-screen apps") {
+                            Toggle("", isOn: $nowPlayingFullScreen).labelsHidden()
+                                .toggleStyle(SwitchToggleStyle(tint: accent))
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Refresh interval").font(.caption).foregroundStyle(.gray)
+                                Spacer()
+                                Text(String(format: "%.1f s", nowPlayingPollSeconds))
+                                    .font(.caption.monospacedDigit()).foregroundStyle(.white)
+                            }
+                            Slider(value: $nowPlayingPollSeconds, in: 0.6...4.0, step: 0.1)
+                                .tint(accent)
+                        }
+                        .padding(12)
+                        .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
+                        Text("Reads Apple Music via AppleScript, and Spotify too when “Include Spotify” is on. Other players are not supported without private system APIs. The strip uses a floating window so it can stay visible over apps like Safari; it is not part of the desktop wallpaper layer.")
+                            .font(.caption2)
+                            .foregroundStyle(.gray)
                     }
 
                     // MARK: Hotkey
@@ -282,6 +369,28 @@ struct SettingsView: View {
                     .padding(12).background(Color.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
+                    // MARK: Updater Diagnostics
+                    sectionHeader("Updater Diagnostics")
+                    VStack(alignment: .leading, spacing: 8) {
+                        diagnosticRow("Status", updaterStatus)
+                        diagnosticRow("Latest Seen", updaterLatest.isEmpty ? "—" : updaterLatest)
+                        diagnosticRow("Last Check", updaterLastCheck.isEmpty ? "Never" : updaterLastCheck)
+                        diagnosticRow("Detail", updaterDetail.isEmpty ? "—" : updaterDetail)
+
+                        Button {
+                            Task { await updater.checkForUpdates(showNoUpdateAlert: true) }
+                        } label: {
+                            Label(updater.isChecking ? "Checking…" : "Run Diagnostic Check",
+                                  systemImage: updater.isChecking ? "arrow.trianglehead.2.clockwise" : "stethoscope")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(DarkButtonStyle(color: accent, liquidGlass: liquidGlass))
+                        .disabled(updater.isChecking)
+                    }
+                    .padding(12)
+                    .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
+
                     // MARK: Sources
                     sectionHeader("Free Wallpaper Sources")
                     VStack(alignment: .leading, spacing: 8) {
@@ -297,17 +406,23 @@ struct SettingsView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12).background(Color.white.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                    Spacer(minLength: 8)
+                    .padding(12)
+                    .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
                 }
                 .padding(.horizontal, 16).padding(.bottom, 16)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: cursorRipple)    { _, _ in updateCursor() }
         .onChange(of: cursorParticles) { _, _ in updateCursor() }
         .onAppear { updateCursor() }
+        .onChange(of: nowPlayingHUDEnabled) { _, _ in NowPlayingHUDController.shared.refreshFromDefaults() }
+        .onChange(of: nowPlayingEdge) { _, _ in NowPlayingHUDController.shared.refreshFromDefaults() }
+        .onChange(of: nowPlayingVerticalPosition) { _, _ in NowPlayingHUDController.shared.resetDockOffset() }
+        .onChange(of: nowPlayingHUDStyle) { _, _ in NowPlayingHUDController.shared.relayout() }
+        .onChange(of: nowPlayingFullScreen) { _, _ in NowPlayingHUDController.shared.refreshFromDefaults() }
+        .onChange(of: nowPlayingPollSeconds) { _, _ in NowPlayingHUDController.shared.refreshFromDefaults() }
     }
 
     private func updateCursor() {
@@ -338,7 +453,20 @@ struct SettingsView: View {
             Spacer()
             control()
         }
-        .padding(12).background(Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(12)
+        .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
+    }
+
+    @ViewBuilder
+    private func diagnosticRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.caption2).foregroundStyle(.gray)
+            Spacer()
+            Text(value)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
     }
 }

@@ -1,0 +1,80 @@
+{
+  "source": "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/VideoWallpaper/CollectionView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "My Library",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 25
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld video%@",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 28
+        }
+      },
+      {
+        "comment": "",
+        "key": "Your library is empty.\nAdd videos from the main screen.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 37
+        }
+      },
+      {
+        "comment": "",
+        "key": "Set as Wallpaper",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 164
+        }
+      },
+      {
+        "comment": "",
+        "key": "Unfavorite",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 167
+        }
+      },
+      {
+        "comment": "",
+        "key": "Favorite",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 167
+        }
+      },
+      {
+        "comment": "",
+        "key": "Get Info",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 170
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reveal in Finder",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 177
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove from Library",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 181
+        }
+      }
+    ]
+  },
+  "version": 1
+}

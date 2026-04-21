@@ -1,0 +1,96 @@
+{
+  "source": "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/VideoWallpaper/ContentView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Video Wallpaper",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 152
+        }
+      },
+      {
+        "comment": "",
+        "key": "Live video on your desktop",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 154
+        }
+      },
+      {
+        "comment": "",
+        "key": "LIVE",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 174
+        }
+      },
+      {
+        "comment": "",
+        "key": "Choose a Video File…",
+        "location": {
+          "startingColumn": 53,
+          "startingLine": 234
+        }
+      },
+      {
+        "comment": "",
+        "key": "Swap Video File…",
+        "location": {
+          "startingColumn": 80,
+          "startingLine": 234
+        }
+      },
+      {
+        "comment": "",
+        "key": "Auto-rotation active",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 266
+        }
+      },
+      {
+        "comment": "",
+        "key": "Stop",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 270
+        }
+      },
+      {
+        "comment": "",
+        "key": "Active on %lld display%@",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 326
+        }
+      },
+      {
+        "comment": "",
+        "key": "No wallpaper set — or drop a file here",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 327
+        }
+      },
+      {
+        "comment": "",
+        "key": "Checking…",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 357
+        }
+      },
+      {
+        "comment": "",
+        "key": "Check Updates",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 359
+        }
+      }
+    ]
+  },
+  "version": 1
+}

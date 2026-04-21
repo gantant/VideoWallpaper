@@ -1,0 +1,23 @@
+{
+  "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/VideoWallpaper/AppState.swift" : {
+    "const-values" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/AppState.swiftconstvalues",
+    "dependencies" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/AppState.d",
+    "diagnostics" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/AppState.dia",
+    "object" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/AppState.o",
+    "swift-dependencies" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/AppState.swiftdeps"
+  },
+  "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/VideoWallpaper/ButtonStyles.swift" : {
+    "const-values" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/ButtonStyles.swiftconstvalues",
+    "dependencies" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/ButtonStyles.d",
+    "diagnostics" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/ButtonStyles.dia",
+    "object" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/ButtonStyles.o",
+    "swift-dependencies" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/ButtonStyles.swiftdeps"
+  },
+  "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/VideoWallpaper/CollectionView.swift" : {
+    "const-values" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/CollectionView.swiftconstvalues",
+    "dependencies" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/CollectionView.d",
+    "diagnostics" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/CollectionView.dia",
+    "object" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/CollectionView.o",
+    "swift-dependencies" : "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/DerivedDataAgentBuild/Build/Intermediates.noindex/VideoWallpaper.build/Debug/VideoWallpaper.build/Objects-normal/arm64/CollectionView.swiftdeps"
+  }
+}

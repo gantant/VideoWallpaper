@@ -1,0 +1,16 @@
+{
+  "source": "/Users/grantwilson/Desktop/Video Wallpaper Archives/VideoWallpaper v1.5 project/VideoWallpaper/NowPlayingHUD.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Now playing — click to open, drag to move",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 916
+        }
+      }
+    ]
+  },
+  "version": 1
+}

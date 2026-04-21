@@ -60,57 +60,41 @@ struct ContentView: View {
     @State private var isLoadingInfo     = false
     @State private var videoInfo: VideoInfo?
     @State private var isDroppingFile    = false
+    @State private var pulseColor: Color = .clear
+    @State private var pulseScale: CGFloat = 0.15
+    @State private var pulseOpacity: Double = 0
 
     @AppStorage("liquidGlass") private var liquidGlass = false
     @AppStorage("accentHex")   private var accentHex: String = "8B5CF6"
+    @AppStorage("buttonRippleFX") private var buttonRippleFX = false
 
     private var accent: Color { Color(hex: accentHex) }
 
-    // MARK: Dynamic height
-    private var popoverHeight: CGFloat {
-        var h: CGFloat = 20 // top padding
+    /// Narrower than full popover width so the file row, swap control, preview, and bar read as compact tiles.
+    private let centeredControlMaxWidth: CGFloat = 278
 
-        // Header
-        h += 70
-        // Divider
-        h += 17
+    private var compactIntroMode: Bool {
+        !UserDefaults.standard.bool(forKey: "hasEverChosenVideo")
+    }
 
-        if showingSettings {
-            return 560 // settings stays fixed
-        }
-        if showingCollection || showingDiscover {
-            return 560
-        }
+    private var shuffleDisabled: Bool {
+        vm.savedWallpapers.filter { $0 != vm.selectedURL }.isEmpty
+    }
 
-        // Live preview
-        if vm.isActive { h += 110 } // preview + gap
+    private var actionButtonCount: Int {
+        if compactIntroMode { return 2 }
+        return 6
+    }
 
-        // File pill
-        if vm.selectedURL != nil { h += 44 }
-        // Choose button
-        h += 46
-        // Gap
-        h += 8
-
-        // Rotation badge
-        if vm.isRotating { h += 44 }
-
-        // Grid
-        if vm.selectedURL != nil {
-            let rows = vm.isActive ? 2 : 1  // 4 buttons = 2 rows, 3 = 2 rows, 2 = 1 row
-            h += CGFloat(rows) * 74 + CGFloat(rows - 1) * 10 + 10
-        }
-
-        // Status
-        h += 24
-        // Spacer min
-        h += 8
-        // Divider + bottom bar
-        h += 17 + 46
-        // bottom padding
-        h += 20
-
-        return max(h, 280)
+    /// Popover is 360pt wide; content area is 320pt after 20pt side padding.
+    private var actionGridColumns: [GridItem] {
+        let contentWidth: CGFloat = 320
+        let spacing: CGFloat = 10
+        let colWidth = max(120, floor((contentWidth - spacing) / 2))
+        return [
+            GridItem(.fixed(colWidth), spacing: spacing, alignment: .center),
+            GridItem(.fixed(colWidth), spacing: spacing, alignment: .center)
+        ]
     }
 
     var body: some View {
@@ -123,6 +107,7 @@ struct ContentView: View {
 
             if showingSettings {
                 SettingsView(vm: vm, showingSettings: $showingSettings)
+                    .frame(maxWidth: .infinity, maxHeight: 430, alignment: .top)
             } else if showingCollection {
                 CollectionView(vm: vm, showingCollection: $showingCollection)
             } else if showingDiscover {
@@ -130,9 +115,22 @@ struct ContentView: View {
             } else {
                 mainView
             }
+
+            Circle()
+                .fill(pulseColor.opacity(0.55))
+                .frame(width: 52, height: 52)
+                .scaleEffect(pulseScale)
+                .blur(radius: 28)
+                .allowsHitTesting(false)
+                .opacity(pulseOpacity)
+                .blendMode(.plusLighter)
+                .zIndex(1000)
         }
-        .frame(width: 360, height: popoverHeight)
-        .animation(.easeInOut(duration: 0.2), value: popoverHeight)
+        .environment(\.popoverRippleTrigger, { c in triggerPopoverPulse(c) })
+        .environment(\.buttonRippleFXEnabled, buttonRippleFX)
+        .frame(width: 360)
+        .fixedSize(horizontal: false, vertical: true)
+        .preferredColorScheme(.dark)
         .sheet(isPresented: $showingInfo) {
             if let info = videoInfo, let url = vm.selectedURL {
                 VideoInfoSheet(url: url, info: info, isPresented: $showingInfo)
@@ -156,38 +154,33 @@ struct ContentView: View {
                     Text("Live video on your desktop")
                         .font(.caption).foregroundStyle(.gray)
                 }
-                HStack {
-                    Spacer()
-                    Button { showingDiscover = true } label: {
-                        Image(systemName: "sparkles")
-                            .frame(width: 32, height: 32)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }.buttonStyle(.plain).foregroundStyle(.white)
-                }
             }
 
             Divider().background(Color.white.opacity(0.1))
 
             // Live mini-preview
             if vm.isActive {
-                ZStack(alignment: .bottomTrailing) {
-                    LivePreviewView()
-                        .frame(height: 90)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(accent.opacity(0.3), lineWidth: 1)
-                        )
+                HStack {
+                    Spacer(minLength: 0)
+                    ZStack(alignment: .bottomTrailing) {
+                        LivePreviewView()
+                            .frame(height: 90)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(accent.opacity(0.3), lineWidth: 1)
+                            )
 
-                    // Small "live" badge
-                    Text("LIVE")
-                        .font(.system(size: 8, weight: .black))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(accent.opacity(0.85))
-                        .clipShape(Capsule())
-                        .padding(6)
+                        Text("LIVE")
+                            .font(.system(size: 8, weight: .black))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(accent.opacity(0.85))
+                            .clipShape(Capsule())
+                            .padding(6)
+                    }
+                    .frame(maxWidth: centeredControlMaxWidth)
+                    Spacer(minLength: 0)
                 }
             }
 
@@ -200,7 +193,7 @@ struct ContentView: View {
                         Text(url.lastPathComponent)
                             .foregroundStyle(.white).font(.caption)
                             .lineLimit(1).truncationMode(.middle)
-                        Spacer()
+                        Spacer(minLength: 4)
                         Button {
                             guard !isLoadingInfo else { return }
                             isLoadingInfo = true
@@ -227,8 +220,11 @@ struct ContentView: View {
                         }.buttonStyle(.plain)
                     }
                     .padding(10)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .background(
+                        LiquidCardBackground(cornerRadius: 8, tint: accent, liquidGlass: liquidGlass)
+                    )
+                    .frame(maxWidth: centeredControlMaxWidth)
+                    .frame(maxWidth: .infinity)
                 }
 
                 // Choose button — doubles as drop target
@@ -238,7 +234,7 @@ struct ContentView: View {
                             vm.selectedURL == nil ? "Choose a Video File…" : "Swap Video File…",
                             systemImage: "arrow.up.doc.fill"
                         )
-                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .frame(maxWidth: .infinity, minHeight: 32)
 
                         if isDroppingFile {
                             RoundedRectangle(cornerRadius: 8)
@@ -247,7 +243,9 @@ struct ContentView: View {
                         }
                     }
                 }
-                .buttonStyle(DarkButtonStyle(color: accent))
+                .buttonStyle(DarkButtonStyle(color: accent, liquidGlass: liquidGlass))
+                .frame(maxWidth: centeredControlMaxWidth)
+                .frame(maxWidth: .infinity)
                 .onDrop(of: [.fileURL], isTargeted: $isDroppingFile) { providers in
                     guard let provider = providers.first else { return false }
                     _ = provider.loadObject(ofClass: URL.self) { url, _ in
@@ -273,35 +271,49 @@ struct ContentView: View {
                     }.buttonStyle(.plain)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(Color.orange.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .background(
+                    LiquidCardBackground(cornerRadius: 8, tint: .orange, liquidGlass: liquidGlass)
+                )
             }
 
-            // Action grid
-            if vm.selectedURL != nil {
-                let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
-                LazyVGrid(columns: cols, spacing: 10) {
+            // Action grid (fixed column widths so cells don’t stretch oddly in the popover)
+            LazyVGrid(columns: actionGridColumns, spacing: 10) {
+                if compactIntroMode {
+                    gridButton(icon: "sparkles.rectangle.stack.fill", label: "Discover", color: .purple) {
+                        showingDiscover = true
+                    }
+                    gridButton(icon: "books.vertical.fill", label: "My Library", color: .blue) {
+                        showingCollection = true
+                    }
+                } else {
                     gridButton(
                         icon: vm.isCurrentInCollection() ? "checkmark.circle.fill" : "star.circle.fill",
                         label: vm.isCurrentInCollection() ? "In Library" : "Add to Library",
                         color: vm.isCurrentInCollection() ? .gray : accent,
-                        disabled: vm.isCurrentInCollection()
+                        disabled: vm.selectedURL == nil || vm.isCurrentInCollection()
                     ) { vm.addCurrentToCollection() }
 
                     gridButton(
                         icon: vm.isActive ? "arrow.clockwise.circle.fill" : "play.rectangle.fill",
                         label: vm.isActive ? "Restart Wallpaper" : "Set as Wallpaper",
-                        color: .green
+                        color: .green,
+                        disabled: vm.selectedURL == nil
                     ) { vm.applyWallpaper() }
 
-                    if vm.isActive {
-                        gridButton(icon: "stop.circle.fill", label: "Remove Wallpaper",
-                                   color: .red.opacity(0.85)) { vm.removeWallpaper() }
+                    gridButton(icon: "stop.circle.fill", label: "Remove Wallpaper",
+                               color: .red.opacity(0.85),
+                               disabled: !vm.isActive) { vm.removeWallpaper() }
+
+                    gridButton(icon: "sparkles.rectangle.stack.fill", label: "Discover", color: .purple) {
+                        showingDiscover = true
                     }
 
                     gridButton(icon: "books.vertical.fill", label: "My Library", color: .blue) {
                         showingCollection = true
                     }
+
+                    gridButton(icon: "shuffle.circle.fill", label: "Shuffle", color: .indigo,
+                               disabled: shuffleDisabled) { vm.shuffleAndApplyFromLibrary() }
                 }
             }
 
@@ -316,17 +328,26 @@ struct ContentView: View {
                     .font(.caption2).foregroundStyle(.gray)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
+                .frame(maxHeight: 14)
             Divider().background(Color.white.opacity(0.1))
 
-            // Bottom bar
+            // Bottom bar (explicit side widths so gear/power never collapse)
             HStack(spacing: 8) {
                 Button { showingSettings = true } label: {
                     Image(systemName: "gearshape.fill")
-                        .frame(width: 36, height: 32)
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(width: 40, height: 34)
                         .background(Color.white.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
-                }.buttonStyle(.plain).foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 34, alignment: .center)
+                .layoutPriority(2)
+                .simultaneousGesture(TapGesture().onEnded { triggerPopoverPulse(.gray) })
+
+                Spacer(minLength: 8)
 
                 Button {
                     Task { await updater.checkForUpdates(showNoUpdateAlert: true) }
@@ -338,18 +359,29 @@ struct ContentView: View {
                             Label("Check Updates", systemImage: "arrow.down.circle")
                         }
                     }
-                    .frame(maxWidth: .infinity).padding(.vertical, 7)
+                    .padding(.vertical, 7)
+                    .padding(.horizontal, 12)
                 }
-                .buttonStyle(DarkButtonStyle(color: .blue.opacity(0.5)))
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
+                .buttonStyle(DarkButtonStyle(color: .blue.opacity(0.5), liquidGlass: liquidGlass))
                 .disabled(updater.isChecking)
 
-                Button { NSApp.terminate(nil) } label: {
+                Spacer(minLength: 8)
+
+                Button { triggerPopoverPulse(.red); NSApp.terminate(nil) } label: {
                     Image(systemName: "power")
-                        .frame(width: 36, height: 32)
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(width: 40, height: 34)
                         .background(Color.white.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
-                }.buttonStyle(.plain).foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 34, alignment: .center)
+                .layoutPriority(2)
             }
+            .frame(maxWidth: .infinity)
         }
         .padding(20)
     }
@@ -367,10 +399,24 @@ struct ContentView: View {
                 Text(label)
                     .font(.system(size: 10, weight: .semibold))
                     .multilineTextAlignment(.center)
-            }.frame(maxWidth: .infinity, minHeight: 58)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, minHeight: 58)
         }
         .buttonStyle(GridButtonStyle(color: color, liquidGlass: liquidGlass))
         .disabled(disabled)
+        .opacity(disabled ? 0.45 : 1)
+    }
+
+    private func triggerPopoverPulse(_ color: Color) {
+        guard buttonRippleFX else { return }
+        pulseColor = color
+        pulseScale = 0.08
+        pulseOpacity = 0.92
+        withAnimation(.easeOut(duration: 0.85)) {
+            pulseScale = 2.35
+            pulseOpacity = 0
+        }
     }
 }
 

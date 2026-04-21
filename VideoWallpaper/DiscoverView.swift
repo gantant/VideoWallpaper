@@ -12,66 +12,6 @@
 // ============================================================
 
 import SwiftUI
-import UniformTypeIdentifiers
-
-// MARK: - Data
-
-struct WallpaperItem: Identifiable {
-    let id = UUID()
-    let name: String
-    let videoURL: String
-    let thumbURL: String
-}
-
-let discoverItems: [(category: String, items: [WallpaperItem])] = [
-    ("Nature", [
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-    ]),
-    ("City", [
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-    ]),
-    ("Abstract", [
-        WallpaperItem(
-            name: "Abstract 1",
-            videoURL: "https://www.pexels.com/download/video/28561594/",
-            thumbURL: "https://images.pexels.com/videos/28561594/3d-rendering-abstract-ai-animation-28561594.jpeg"
-        ),
-        WallpaperItem(
-            name: "Abstract 2",
-            videoURL: "https://www.pexels.com/download/video/32399542/",
-            thumbURL: "https://intelloai.com/hero-intello-poster.jpg"
-        ),
-        WallpaperItem(
-            name: "Abstract 3",
-            videoURL: "https://www.pexels.com/download/video/30090680/",
-            thumbURL: "https://images.pexels.com/videos/30090680/pexels-photo-30090680.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500"
-        ),
-        WallpaperItem(
-            name: "Abstract 4",
-            videoURL: "https://www.pexels.com/download/video/29460403/",
-            thumbURL: "https://images.pexels.com/videos/29460403/3d-abstract-architecture-background-29460403.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500"
-        ),
-        WallpaperItem(
-            name: "Abstract 5",
-            videoURL: "https://www.pexels.com/download/video/8733062/",
-            thumbURL: "https://i.ytimg.com/vi/7DCY3faeJUc/maxresdefault.jpg"
-        ),
-    ]),
-    ("Space", [
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-    ]),
-    ("Water", [
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-        WallpaperItem(name: "Coming Soon", videoURL: "", thumbURL: ""),
-    ]),
-]
 
 // MARK: - View
 
@@ -79,130 +19,238 @@ struct DiscoverView: View {
     @ObservedObject var vm: WallpaperViewModel
     @Binding var showingDiscover: Bool
 
-    @State private var selectedCategory = "Abstract"
-    @State private var loadingID: UUID?
+    @AppStorage("liquidGlass") private var liquidGlass = false
+    @AppStorage("accentHex") private var accentHex: String = "8B5CF6"
+    @AppStorage("discoverSort") private var discoverSort: String = "featured"
+
+    @State private var selectedCategory = "Featured"
+    @State private var loadingID: String?
     @State private var isSearching = false
     @State private var searchText = ""
+    @State private var errorText: String?
+    @State private var sourceFilter = "All Sources"
 
-    private let categories = discoverItems.map { $0.category }
+    private var categories: [String] { DiscoverCatalog.categories }
+    private var sources: [String] {
+        ["All Sources"] + Array(Set(DiscoverCatalog.items.map(\.sourceName))).sorted()
+    }
     private var currentItems: [WallpaperItem] {
-        discoverItems.first { $0.category == selectedCategory }?.items ?? []
+        var list = DiscoverCatalog.items.filter { selectedCategory == "Featured" || $0.category == selectedCategory }
+
+        if sourceFilter != "All Sources" {
+            list = list.filter { $0.sourceName == sourceFilter }
+        }
+
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !query.isEmpty {
+            list = list.filter { item in
+                item.name.lowercased().contains(query)
+                || item.genre.lowercased().contains(query)
+                || item.tags.joined(separator: " ").lowercased().contains(query)
+            }
+        }
+
+        switch discoverSort {
+        case "name":
+            return list.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case "source":
+            return list.sorted {
+                if $0.sourceName == $1.sourceName {
+                    return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
+                return $0.sourceName.localizedCaseInsensitiveCompare($1.sourceName) == .orderedAscending
+            }
+        default:
+            return list.sorted { $0.isAvailable && !$1.isAvailable }
+        }
     }
 
     var body: some View {
         VStack(spacing: 12) {
-            // Header
-            HStack {
-                Button { showingDiscover = false } label: {
-                    Image(systemName: "arrow.left").foregroundStyle(.white)
-                }.buttonStyle(.plain)
-                Text("Discover").foregroundStyle(.white).font(.headline)
-                Spacer()
-                Button { isSearching = true } label: {
-                    Image(systemName: "magnifyingglass")
-                        .frame(width: 28, height: 28)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-                        .foregroundStyle(.white)
-                }.buttonStyle(.plain)
-            }
+            headerView
 
-            // Inline search bar
             if isSearching {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.gray).font(.caption)
-                    TextField("Search Pexels videos…", text: $searchText)
-                        .textFieldStyle(.plain).font(.caption).foregroundStyle(.white)
-                        .onSubmit { submitSearch() }
-                    if !searchText.isEmpty {
-                        Button { searchText = "" } label: {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(.gray)
-                        }.buttonStyle(.plain)
-                    }
-                    Button("Go") { submitSearch() }
-                        .font(.caption.weight(.semibold)).foregroundStyle(.purple).buttonStyle(.plain)
-                    Button { isSearching = false; searchText = "" } label: {
-                        Text("Cancel").font(.caption).foregroundStyle(.gray)
-                    }.buttonStyle(.plain)
-                }
-                .padding(.horizontal, 10).padding(.vertical, 7)
-                .background(Color.white.opacity(0.07))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                searchBar
             }
 
-            // Category pills
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(categories, id: \.self) { cat in
-                        Button { selectedCategory = cat } label: {
-                            Text(cat)
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 12).padding(.vertical, 6)
-                                .background(RoundedRectangle(cornerRadius: 20)
-                                    .fill(selectedCategory == cat
-                                          ? Color.purple.opacity(0.6)
-                                          : Color.white.opacity(0.08)))
-                                .foregroundStyle(.white)
-                        }.buttonStyle(.plain)
-                    }
-                }
-            }
+            sourceAndSortRow
+            categoriesStrip
 
-            // Grid
             ScrollView {
                 LazyVGrid(
                     columns: [GridItem(.flexible()), GridItem(.flexible())],
                     spacing: 10
                 ) {
                     ForEach(currentItems) { item in
-                        VStack(spacing: 6) {
-                            AsyncImage(url: URL(string: item.thumbURL)) { phase in
-                                switch phase {
-                                case .success(let img): img.resizable().scaledToFill()
-                                case .failure:          Color.red.opacity(0.2)
-                                default:                Color.gray.opacity(0.2).overlay(ProgressView())
-                                }
-                            }
-                            .frame(height: 75)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .clipped()
+                        card(for: item)
+                    }
+                }
+            }
 
-                            Text(item.name)
-                                .font(.caption2.weight(.medium)).foregroundStyle(.white).lineLimit(1)
+            if let errorText {
+                Text(errorText)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(16)
+        .background(
+            Group {
+                if liquidGlass, #available(macOS 26, *) {
+                    Color.clear
+                } else {
+                    Color(red: 0.08, green: 0.08, blue: 0.10)
+                }
+            }
+        )
+    }
 
-                            Button { downloadAndApply(item) } label: {
-                                Group {
-                                    if loadingID == item.id {
-                                        HStack(spacing: 4) {
-                                            ProgressView().scaleEffect(0.6)
-                                            Text("Loading…")
-                                        }
-                                    } else {
-                                        Label(
-                                            item.videoURL.isEmpty ? "Coming Soon" : "Use",
-                                            systemImage: item.videoURL.isEmpty ? "clock" : "play.rectangle.fill"
-                                        )
-                                    }
-                                }
-                                .font(.caption2.weight(.semibold))
-                                .frame(maxWidth: .infinity).padding(.vertical, 5)
-                                .background(RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.purple.opacity(item.videoURL.isEmpty ? 0.15 : 0.4)))
-                                .foregroundStyle(.white)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(loadingID != nil || item.videoURL.isEmpty)
+    // MARK: - Actions
+
+    private var headerView: some View {
+        HStack {
+            BackNavigationButton(title: "Back") { showingDiscover = false }
+            Text("Discover").foregroundStyle(.white).font(.headline)
+            Spacer()
+            Button { isSearching = true } label: {
+                Image(systemName: "magnifyingglass")
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.gray).font(.caption)
+            TextField("Search by name, genre, or tags…", text: $searchText)
+                .textFieldStyle(.plain).font(.caption).foregroundStyle(.white)
+                .onSubmit { submitSearch() }
+            if !searchText.isEmpty {
+                Button { searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.gray)
+                }.buttonStyle(.plain)
+            }
+            Button("Web") { submitSearch() }
+                .font(.caption.weight(.semibold)).foregroundStyle(Color(hex: accentHex)).buttonStyle(.plain)
+            Button { isSearching = false; searchText = "" } label: {
+                Text("Cancel").font(.caption).foregroundStyle(.gray)
+            }.buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        .background(Color.white.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var sourceAndSortRow: some View {
+        HStack(spacing: 8) {
+            Picker("", selection: $sourceFilter) {
+                ForEach(sources, id: \.self) { src in
+                    Text(src).tag(src)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+
+            Picker("", selection: $discoverSort) {
+                Text("Featured").tag("featured")
+                Text("Name").tag("name")
+                Text("Source").tag("source")
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private var categoriesStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(categories, id: \.self) { cat in
+                    categoryPill(cat)
+                }
+            }
+        }
+    }
+
+    private func categoryPill(_ category: String) -> some View {
+        Button { selectedCategory = category } label: {
+            Text(category)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(selectedCategory == category ? Color(hex: accentHex).opacity(0.6) : Color.white.opacity(0.08))
+                )
+                .foregroundStyle(.white)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func card(for item: WallpaperItem) -> some View {
+        VStack(spacing: 6) {
+            AsyncImage(url: URL(string: item.thumbURL)) { phase in
+                switch phase {
+                case .success(let img): img.resizable().scaledToFill()
+                case .failure:          Color.red.opacity(0.2)
+                default:                Color.gray.opacity(0.2).overlay(ProgressView())
+                }
+            }
+            .frame(height: 75)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipped()
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text("\(item.genre) • \(item.sourceName)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.gray)
+                        .lineLimit(1)
+                }
+                Spacer()
+            }
+
+            Button { downloadAndApply(item) } label: {
+                Group {
+                    if loadingID == item.id {
+                        HStack(spacing: 4) {
+                            ProgressView().scaleEffect(0.6)
+                            Text("Loading…")
                         }
-                        .padding(8).background(Color.white.opacity(0.05))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        Label(
+                            item.isAvailable ? "Use" : "Open Source",
+                            systemImage: item.isAvailable ? "play.rectangle.fill" : "safari"
+                        )
+                    }
+                }
+                .font(.caption2.weight(.semibold))
+                .frame(maxWidth: .infinity).padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color(hex: accentHex).opacity(item.isAvailable ? 0.4 : 0.2)))
+                .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .disabled(loadingID != nil)
+            .contextMenu {
+                Button("Open Source Page") { openSourcePage(item) }
+                if item.isAvailable {
+                    Button("Copy Video URL") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(item.videoURL, forType: .string)
                     }
                 }
             }
         }
-        .padding(16)
+        .padding(8)
+        .background(LiquidCardBackground(cornerRadius: 8, tint: Color(hex: accentHex), liquidGlass: liquidGlass))
     }
-
-    // MARK: - Actions
 
     private func submitSearch() {
         let q = searchText.trimmingCharacters(in: .whitespaces)
@@ -211,17 +259,25 @@ struct DiscoverView: View {
         if let url = URL(string: "https://www.pexels.com/search/videos/\(enc)/") {
             NSWorkspace.shared.open(url)
         }
-        isSearching = false; searchText = ""
+    }
+
+    private func openSourcePage(_ item: WallpaperItem) {
+        guard let url = URL(string: item.sourcePageURL) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func downloadAndApply(_ item: WallpaperItem) {
-        guard !item.videoURL.isEmpty, let url = URL(string: item.videoURL) else { return }
+        guard item.isAvailable, let url = URL(string: item.videoURL) else {
+            openSourcePage(item)
+            return
+        }
         loadingID = item.id
+        errorText = nil
 
         let safeFileName = item.name.replacingOccurrences(of: " ", with: "-") + ".mp4"
         let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-            let destDir = (downloads ?? FileManager.default.temporaryDirectory)
-                .appendingPathComponent("VideoWallpapers", conformingTo: .directory)            .appendingPathComponent("VideoWallpapers")
+        let destDir = (downloads ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("VideoWallpapers", isDirectory: true)
         let dest = destDir.appendingPathComponent(safeFileName)
 
         if FileManager.default.fileExists(atPath: dest.path) {
@@ -247,6 +303,9 @@ struct DiscoverView: View {
 
             if let err { print("[Discover] Error:", err); return }
             guard let data, data.count > 1_000_000 else {
+                DispatchQueue.main.async {
+                    errorText = "Download failed. Try opening the source page."
+                }
                 print("[Discover] Response too small or empty"); return
             }
 
