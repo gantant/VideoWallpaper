@@ -58,13 +58,6 @@ struct SettingsView: View {
     @AppStorage("cursorRipple")     private var cursorRipple:    Bool   = false
     @AppStorage("cursorParticles")  private var cursorParticles: Bool   = false
     @AppStorage("buttonRippleFX")   private var buttonRippleFX:  Bool   = false
-    @AppStorage("nowPlayingHUDEnabled") private var nowPlayingHUDEnabled: Bool = false
-    @AppStorage("nowPlayingIncludeSpotify") private var nowPlayingIncludeSpotify: Bool = true
-    @AppStorage("nowPlayingEdge") private var nowPlayingEdge: String = "trailing"
-    @AppStorage("nowPlayingVerticalPosition") private var nowPlayingVerticalPosition: String = "high"
-    @AppStorage("nowPlayingHUDStyle") private var nowPlayingHUDStyle: String = "artBlur"
-    @AppStorage("nowPlayingFullScreen") private var nowPlayingFullScreen: Bool = false
-    @AppStorage("nowPlayingPollSeconds") private var nowPlayingPollSeconds: Double = 1.2
     @AppStorage("fpsCap")           private var fpsCap:          Int    = 0
     @AppStorage("rotationInterval") private var rotationInterval: Double = 5
     @AppStorage("accentHex")        private var accentHex:       String = "8B5CF6"
@@ -280,78 +273,6 @@ struct SettingsView: View {
                             .toggleStyle(SwitchToggleStyle(tint: accent))
                     }
 
-                    // MARK: Now Playing HUD
-                    sectionHeader("Now Playing HUD")
-                    VStack(alignment: .leading, spacing: 8) {
-                        settingRow(title: "Show music strip", subtitle: "Black notch on the edge — hover to peek, click to open, drag to move (Music / Spotify; Automation access)") {
-                            Toggle("", isOn: $nowPlayingHUDEnabled).labelsHidden()
-                                .toggleStyle(SwitchToggleStyle(tint: accent))
-                        }
-                        settingRow(title: "Include Spotify", subtitle: "Off = Apple Music only; skips Spotify AppleScript (no Spotify app prompts)") {
-                            Toggle("", isOn: $nowPlayingIncludeSpotify).labelsHidden()
-                                .toggleStyle(SwitchToggleStyle(tint: accent))
-                        }
-                        HStack {
-                            Text("Edge").font(.caption).foregroundStyle(.gray)
-                            Spacer()
-                            Picker("", selection: $nowPlayingEdge) {
-                                Text("Left").tag("leading")
-                                Text("Right").tag("trailing")
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
-                            .frame(width: 160)
-                        }
-                        .padding(12)
-                        .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
-                        HStack {
-                            Text("Vertical").font(.caption).foregroundStyle(.gray)
-                            Spacer()
-                            Picker("", selection: $nowPlayingVerticalPosition) {
-                                Text("Top").tag("high")
-                                Text("Center").tag("center")
-                                Text("Bottom").tag("low")
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
-                            .frame(maxWidth: 220)
-                        }
-                        .padding(12)
-                        .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
-                        HStack {
-                            Text("Background").font(.caption).foregroundStyle(.gray)
-                            Spacer()
-                            Picker("", selection: $nowPlayingHUDStyle) {
-                                Text("Art blur").tag("artBlur")
-                                Text("Glass").tag("glass")
-                                Text("None (transparent)").tag("none")
-                            }
-                            .labelsHidden()
-                            .frame(width: 140)
-                        }
-                        .padding(12)
-                        .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
-                        settingRow(title: "Show in fullscreen spaces", subtitle: "May be blocked by some full-screen apps") {
-                            Toggle("", isOn: $nowPlayingFullScreen).labelsHidden()
-                                .toggleStyle(SwitchToggleStyle(tint: accent))
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Refresh interval").font(.caption).foregroundStyle(.gray)
-                                Spacer()
-                                Text(String(format: "%.1f s", nowPlayingPollSeconds))
-                                    .font(.caption.monospacedDigit()).foregroundStyle(.white)
-                            }
-                            Slider(value: $nowPlayingPollSeconds, in: 0.6...4.0, step: 0.1)
-                                .tint(accent)
-                        }
-                        .padding(12)
-                        .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
-                        Text("Reads Apple Music via AppleScript, and Spotify too when “Include Spotify” is on. Other players are not supported without private system APIs. The strip uses a floating window so it can stay visible over apps like Safari; it is not part of the desktop wallpaper layer.")
-                            .font(.caption2)
-                            .foregroundStyle(.gray)
-                    }
-
                     // MARK: Hotkey
                     sectionHeader("Keyboard Shortcut")
                     HStack(spacing: 8) {
@@ -417,12 +338,6 @@ struct SettingsView: View {
         .onChange(of: cursorRipple)    { _, _ in updateCursor() }
         .onChange(of: cursorParticles) { _, _ in updateCursor() }
         .onAppear { updateCursor() }
-        .onChange(of: nowPlayingHUDEnabled) { _, _ in NowPlayingHUDController.shared.refreshFromDefaults() }
-        .onChange(of: nowPlayingEdge) { _, _ in NowPlayingHUDController.shared.refreshFromDefaults() }
-        .onChange(of: nowPlayingVerticalPosition) { _, _ in NowPlayingHUDController.shared.resetDockOffset() }
-        .onChange(of: nowPlayingHUDStyle) { _, _ in NowPlayingHUDController.shared.relayout() }
-        .onChange(of: nowPlayingFullScreen) { _, _ in NowPlayingHUDController.shared.refreshFromDefaults() }
-        .onChange(of: nowPlayingPollSeconds) { _, _ in NowPlayingHUDController.shared.refreshFromDefaults() }
     }
 
     private func updateCursor() {

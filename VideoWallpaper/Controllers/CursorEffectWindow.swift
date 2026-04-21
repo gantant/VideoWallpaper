@@ -78,6 +78,9 @@ class CursorEffectView: NSView {
     private var renderTimer: Timer?
     /// Padding around ripples/particles for stroke/glow; also used when expanding erase rects.
     private let effectPad: CGFloat = 56
+    private func rippleMaxRadius() -> CGFloat {
+        max(bounds.width, bounds.height) * 5
+    }
     /// Previous frame’s effect bounds so the next redraw clears trails as ripples expand/move.
     private var prevEffectDirty: CGRect = .null
 
@@ -129,17 +132,17 @@ class CursorEffectView: NSView {
         }
 
         ripples = ripples.compactMap { r -> (CGPoint, CGFloat)? in
-            let a = r.age + 0.04; return a < 1 ? (r.pos, a) : nil
+            let a = r.age + 0.006; return a < 1.2 ? (r.pos, a) : nil
         }
         particles = particles.compactMap { p -> (CGPoint, CGPoint, CGFloat)? in
-            let a = p.age + 0.05
+            let a = p.age + 0.03
             let np = CGPoint(x: p.pos.x + p.vel.x, y: p.pos.y - p.vel.y)
             return a < 1 ? (np, p.vel, a) : nil
         }
 
         var effectBB = CGRect.null
         for r in ripples {
-            let rad = r.age * 50 + 6
+            let rad = r.age * rippleMaxRadius() + 6
             effectBB = effectBB.union(CGRect(x: r.pos.x - rad, y: r.pos.y - rad, width: rad * 2, height: rad * 2))
         }
         for p in particles {
@@ -176,8 +179,9 @@ class CursorEffectView: NSView {
         ctx.clear(dirtyRect)
 
         for r in ripples {
-            let rad = r.age * 50
-            ctx.setStrokeColor(NSColor(white: 1, alpha: (1 - r.age) * 0.45).cgColor)
+            let rad = r.age * rippleMaxRadius()
+            let alpha = max(0, (1.2 - r.age) / 1.2) * 0.45
+            ctx.setStrokeColor(NSColor(white: 1, alpha: alpha).cgColor)
             ctx.setLineWidth(1.2)
             ctx.addEllipse(in: CGRect(
                 x: r.pos.x - rad, y: r.pos.y - rad,

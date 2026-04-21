@@ -112,6 +112,7 @@ struct ContentView: View {
                 CollectionView(vm: vm, showingCollection: $showingCollection)
             } else if showingDiscover {
                 DiscoverView(vm: vm, showingDiscover: $showingDiscover)
+                    .frame(maxWidth: .infinity, maxHeight: 430, alignment: .top)
             } else {
                 mainView
             }
@@ -280,7 +281,7 @@ struct ContentView: View {
             LazyVGrid(columns: actionGridColumns, spacing: 10) {
                 if compactIntroMode {
                     gridButton(icon: "sparkles.rectangle.stack.fill", label: "Discover", color: .purple) {
-                        showingDiscover = true
+                        DiscoverWindowController.shared.show()
                     }
                     gridButton(icon: "books.vertical.fill", label: "My Library", color: .blue) {
                         showingCollection = true
@@ -305,7 +306,7 @@ struct ContentView: View {
                                disabled: !vm.isActive) { vm.removeWallpaper() }
 
                     gridButton(icon: "sparkles.rectangle.stack.fill", label: "Discover", color: .purple) {
-                        showingDiscover = true
+                        DiscoverWindowController.shared.show()
                     }
 
                     gridButton(icon: "books.vertical.fill", label: "My Library", color: .blue) {
@@ -334,7 +335,9 @@ struct ContentView: View {
 
             // Bottom bar (explicit side widths so gear/power never collapse)
             HStack(spacing: 8) {
-                Button { showingSettings = true } label: {
+                Button {
+                    SettingsWindowController.shared.show()
+                } label: {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 14, weight: .semibold))
                         .frame(width: 40, height: 34)

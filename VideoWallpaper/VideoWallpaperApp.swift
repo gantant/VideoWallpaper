@@ -118,8 +118,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 await MainActor.run { viewModel.isActive = true }
             }
         }
-
-        NowPlayingHUDController.shared.refreshFromDefaults()
     }
 
     @objc func togglePopover(_ sender: AnyObject?) {

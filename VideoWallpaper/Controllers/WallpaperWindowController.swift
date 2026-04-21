@@ -129,10 +129,6 @@ class WallpaperWindowController: NSObject {
 
         let did = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0
         slots.append(ScreenSlot(window: win, player: player, looper: looper, obs: obs, displayID: did))
-
-        DispatchQueue.main.async {
-            NowPlayingHUDController.shared.orderAboveWallpaperIfNeeded()
-        }
     }
 
     // MARK: - Screen changes
