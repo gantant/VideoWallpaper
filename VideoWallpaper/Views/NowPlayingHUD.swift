@@ -679,6 +679,7 @@ struct NowPlayingHUDView: View {
                             endPoint: .bottom
                         )
                     )
+                    .clipShape(squircle)
             } else {
                 LinearGradient(
                     colors: [

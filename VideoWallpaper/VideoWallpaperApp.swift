@@ -123,7 +123,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func togglePopover(_ sender: AnyObject?) {
-        guard let btn = statusItem?.button, let popover else { return }
+        guard let popover = self.popover,
+              let item = self.statusItem,
+              let btn = item.button,
+              !btn.bounds.isEmpty else { return }
         if popover.isShown {
             popover.performClose(sender)
         } else {
