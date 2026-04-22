@@ -109,7 +109,6 @@ struct DiscoverView: View {
 
     private var headerView: some View {
         HStack {
-            BackNavigationButton(title: "Back") { showingDiscover = false }
             Text("Discover").foregroundStyle(.white).font(.headline)
             Spacer()
             Button { isSearching = true } label: {

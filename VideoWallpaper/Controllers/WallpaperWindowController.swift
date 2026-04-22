@@ -16,6 +16,33 @@ import AppKit
 import AVKit
 import AVFoundation
 
+enum WallpaperSlot: String, CaseIterable, Identifiable {
+    case lightMode = "Light Mode"
+    case darkMode = "Dark Mode"
+    case dayTime = "Day"
+    case nightTime = "Night"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .lightMode: return "sun.max.fill"
+        case .darkMode: return "moon.fill"
+        case .dayTime: return "sunrise.fill"
+        case .nightTime: return "moon.stars.fill"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .lightMode: return "When macOS is in light mode"
+        case .darkMode: return "When macOS is in dark mode"
+        case .dayTime: return "6 AM – 6 PM"
+        case .nightTime: return "6 PM – 6 AM"
+        }
+    }
+}
+
 class WallpaperWindowController: NSObject {
     static let shared = WallpaperWindowController()
 
@@ -33,6 +60,10 @@ class WallpaperWindowController: NSObject {
     private(set) var currentRate: Float = 1.0
     var isActive: Bool { !slots.isEmpty }
 
+    private var slotWallpapers: [WallpaperSlot: URL] = [:]
+    private var appearanceObserver: Any?
+    private var timeObserver: Timer?
+
     // Rotation
     private var rotationTimer: Timer?
     private var rotationURLs: [URL] = []
@@ -44,6 +75,96 @@ class WallpaperWindowController: NSObject {
     override init() {
         super.init()
         setupSleepObservers()
+        loadSlotWallpapers()
+        startSlotObservers()
+    }
+
+    deinit {
+        if let obs = appearanceObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        timeObserver?.invalidate()
+    }
+
+    private func loadSlotWallpapers() {
+        for slot in WallpaperSlot.allCases {
+            if let path = UserDefaults.standard.string(forKey: "wallpaperSlot_\(slot.rawValue)"),
+               FileManager.default.fileExists(atPath: path) {
+                slotWallpapers[slot] = URL(fileURLWithPath: path)
+            }
+        }
+    }
+
+    func setSlotWallpaper(_ slot: WallpaperSlot, url: URL?) {
+        if let url = url {
+            slotWallpapers[slot] = url
+            UserDefaults.standard.set(url.path, forKey: "wallpaperSlot_\(slot.rawValue)")
+        } else {
+            slotWallpapers.removeValue(forKey: slot)
+            UserDefaults.standard.removeObject(forKey: "wallpaperSlot_\(slot.rawValue)")
+        }
+        evaluateAndApplyWallpaper()
+    }
+
+    func getSlotWallpaper(_ slot: WallpaperSlot) -> URL? {
+        slotWallpapers[slot]
+    }
+
+    func hasSlotWallpapers() -> Bool {
+        !slotWallpapers.isEmpty
+    }
+
+    private func startSlotObservers() {
+        appearanceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.evaluateAndApplyWallpaper()
+        }
+
+        timeObserver = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+            self?.evaluateAndApplyWallpaper()
+        }
+        RunLoop.main.add(timeObserver!, forMode: .common)
+
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard UserDefaults.standard.bool(forKey: "useTimeBasedWallpaper") == false else {
+                self?.evaluateAndApplyWallpaper()
+                return
+            }
+            self?.evaluateAndApplyWallpaper()
+        }
+
+        evaluateAndApplyWallpaper()
+    }
+
+    func evaluateAndApplyWallpaper() {
+        guard hasSlotWallpapers() else { return }
+
+        let useTimeBased = UserDefaults.standard.bool(forKey: "useTimeBasedWallpaper")
+
+        var targetURL: URL?
+
+        if useTimeBased {
+            let hour = Calendar.current.component(.hour, from: Date())
+            if hour >= 6 && hour < 18 {
+                targetURL = slotWallpapers[.dayTime]
+            } else {
+                targetURL = slotWallpapers[.nightTime]
+            }
+        } else {
+            let isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            targetURL = isDark ? slotWallpapers[.darkMode] : slotWallpapers[.lightMode]
+        }
+
+        if let url = targetURL, url != currentURL {
+            Task { await setVideo(url: url, rate: currentRate, fade: true) }
+        }
     }
 
     // MARK: - Set video
@@ -222,25 +343,53 @@ class WallpaperWindowController: NSObject {
 
     private func setupSleepObservers() {
         let nc = NSWorkspace.shared.notificationCenter
+
+        // System going to sleep
+        sleepObservers.append(nc.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.slots.forEach { $0.player.pause() }
+        })
+
+        // All screens sleeping (display off)
         sleepObservers.append(nc.addObserver(
             forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
                 self?.slots.forEach { $0.player.pause() }
         })
+
+        // Wake from sleep
+        sleepObservers.append(nc.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                guard let self else { return }
+                let r = self.currentRate
+                self.slots.forEach { $0.player.rate = r }
+        })
+
+        // Screens woke up
         sleepObservers.append(nc.addObserver(
             forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
                 guard let self else { return }
                 let r = self.currentRate
                 self.slots.forEach { $0.player.rate = r }
         })
+
+        // App became inactive (e.g., screen lock, user switching)
         sleepObservers.append(nc.addObserver(
             forName: NSWorkspace.sessionDidResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
                 self?.slots.forEach { $0.player.pause() }
         })
+
+        // App became active
         sleepObservers.append(nc.addObserver(
             forName: NSWorkspace.sessionDidBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
                 guard let self else { return }
                 let r = self.currentRate
                 self.slots.forEach { $0.player.rate = r }
+        })
+
+        // Screen configuration changed (resolution, arrangement)
+        sleepObservers.append(nc.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.handleScreensChanged()
         })
     }
 }

@@ -11,6 +11,7 @@
 // ============================================================
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Accent color helper
 
@@ -51,6 +52,7 @@ struct SettingsView: View {
     @ObservedObject var vm: WallpaperViewModel
     @Binding var showingSettings: Bool
     @StateObject private var updater = GitHubUpdater()
+    @State private var slotRefresh: Int = 0
 
     @AppStorage("liquidGlass")      private var liquidGlass:     Bool   = false
     @AppStorage("fadeTransition")   private var fadeTransition:  Bool   = true
@@ -67,14 +69,16 @@ struct SettingsView: View {
     @AppStorage("updater.detail") private var updaterDetail = ""
 
     @State private var rotationSelected: Set<URL> = []
+    @State private var useTimeBased: Bool = false
 
     private var accent: Color { Color(hex: accentHex) }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Nav bar
+            Color.clear
+                .frame(height: 0)
+                .id(slotRefresh)
             HStack {
-                BackNavigationButton(title: "Back") { showingSettings = false }
                 Text("Settings").foregroundStyle(.white).font(.headline)
                 Spacer()
             }
@@ -128,6 +132,59 @@ struct SettingsView: View {
                     settingRow(title: "Button Ripple FX", subtitle: "Glow and radial pulse on button taps") {
                         Toggle("", isOn: $buttonRippleFX).labelsHidden()
                             .toggleStyle(SwitchToggleStyle(tint: accent))
+                    }
+
+                    // MARK: Dynamic Wallpapers
+                    sectionHeader("Dynamic Wallpapers")
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("Mode").font(.caption).foregroundStyle(.gray)
+                            Spacer()
+                            Picker("", selection: $useTimeBased) {
+                                Text("Light/Dark").tag(false)
+                                Text("Day/Night").tag(true)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .frame(width: 160)
+                            .onChange(of: useTimeBased) { _, _ in
+                                UserDefaults.standard.set(useTimeBased, forKey: "useTimeBasedWallpaper")
+                                WallpaperWindowController.shared.evaluateAndApplyWallpaper()
+                                if WallpaperWindowController.shared.hasSlotWallpapers() {
+                                    WallpaperWindowController.shared.evaluateAndApplyWallpaper()
+                                }
+                            }
+                        }
+                        Text(useTimeBased
+                             ? "Switches at 6 AM and 6 PM"
+                             : "Switches based on system appearance")
+                            .font(.caption2).foregroundStyle(.gray)
+                    }
+                    .padding(12)
+                    .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
+
+                    ForEach(WallpaperSlot.allCases) { slot in
+                        slotRow(slot)
+                    }
+
+                    let hasDynamicWallpapers = WallpaperWindowController.shared.hasSlotWallpapers()
+
+                    if hasDynamicWallpapers {
+                        Button {
+                            for slot in WallpaperSlot.allCases {
+                                WallpaperWindowController.shared.setSlotWallpaper(slot, url: nil)
+                            }
+                            slotRefresh += 1
+                        } label: {
+                            HStack {
+                                Image(systemName: "xmark.circle")
+                                Text("Clear Dynamic Wallpapers")
+                            }
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(DarkButtonStyle(color: .red.opacity(0.7), liquidGlass: liquidGlass))
                     }
 
                     // MARK: Playback Speed
@@ -195,7 +252,7 @@ struct SettingsView: View {
                     .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
 
                     // MARK: Rotation
-                    sectionHeader("Auto-Rotation")
+                    sectionHeader("Auto-Rotation" + (hasDynamicWallpapers ? " (Disabled)" : ""))
                     VStack(spacing: 8) {
                         HStack {
                             Text("Switch every").font(.caption).foregroundStyle(.gray)
@@ -206,6 +263,7 @@ struct SettingsView: View {
                                 .font(.caption.monospacedDigit()).foregroundStyle(.white)
                         }
                         Slider(value: $rotationInterval, in: 0.5...60, step: 0.5).tint(accent)
+                        .disabled(hasDynamicWallpapers)
 
                         if vm.savedWallpapers.isEmpty {
                             Text("Add videos to your Library to use rotation.")
@@ -229,7 +287,9 @@ struct SettingsView: View {
                                     .padding(.horizontal, 8).padding(.vertical, 6)
                                     .background(Color.white.opacity(rotationSelected.contains(url) ? 0.1 : 0.03))
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    .opacity(hasDynamicWallpapers ? 0.5 : 1)
                                     .onTapGesture {
+                                        guard !hasDynamicWallpapers else { return }
                                         if rotationSelected.contains(url) { rotationSelected.remove(url) }
                                         else { rotationSelected.insert(url) }
                                     }
@@ -241,6 +301,7 @@ struct SettingsView: View {
                                     Label("Stop Rotation", systemImage: "stop.circle")
                                         .frame(maxWidth: .infinity).padding(.vertical, 8)
                                 }.buttonStyle(DarkButtonStyle(color: .red.opacity(0.7), liquidGlass: liquidGlass))
+                                .disabled(hasDynamicWallpapers)
                             } else {
                                 Button {
                                     let urls = vm.savedWallpapers.filter { rotationSelected.contains($0) }
@@ -251,8 +312,8 @@ struct SettingsView: View {
                                         .frame(maxWidth: .infinity).padding(.vertical, 8)
                                 }
                                 .buttonStyle(DarkButtonStyle(color: accent, liquidGlass: liquidGlass))
-                                .disabled(rotationSelected.count < 2)
-                                if rotationSelected.count < 2 {
+                                .disabled(rotationSelected.count < 2 || hasDynamicWallpapers)
+                                if rotationSelected.count < 2 && !hasDynamicWallpapers {
                                     Text("Select at least 2 videos.")
                                         .font(.caption2).foregroundStyle(.gray)
                                 }
@@ -261,6 +322,25 @@ struct SettingsView: View {
                     }
                     .padding(12)
                     .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
+                    .opacity(hasDynamicWallpapers ? 0.5 : 1)
+
+                    if hasDynamicWallpapers {
+                        Button {
+                            for slot in WallpaperSlot.allCases {
+                                WallpaperWindowController.shared.setSlotWallpaper(slot, url: nil)
+                            }
+                            slotRefresh += 1
+                        } label: {
+                            HStack {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                Text("Switch to Auto-Rotation")
+                            }
+                            .font(.caption)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                        }
+                        .buttonStyle(DarkButtonStyle(color: accent, liquidGlass: liquidGlass))
+                    }
 
                     // MARK: Cursor Effects
                     sectionHeader("Cursor Effects")
@@ -337,7 +417,7 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: cursorRipple)    { _, _ in updateCursor() }
         .onChange(of: cursorParticles) { _, _ in updateCursor() }
-        .onAppear { updateCursor() }
+        .onAppear { updateCursor(); slotRefresh += 1 }
     }
 
     private func updateCursor() {
@@ -383,5 +463,45 @@ struct SettingsView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
+    }
+
+    @ViewBuilder
+    private func slotRow(_ slot: WallpaperSlot) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: slot.icon)
+                .font(.system(size: 14))
+                .foregroundStyle(accent)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(slot.rawValue).foregroundStyle(.white).font(.subheadline.weight(.medium))
+                Text(slot.subtitle).foregroundStyle(.gray).font(.caption2)
+            }
+            Spacer()
+            if WallpaperWindowController.shared.getSlotWallpaper(slot) != nil {
+                Button {
+                    WallpaperWindowController.shared.setSlotWallpaper(slot, url: nil)
+                    slotRefresh += 1
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.gray)
+                }.buttonStyle(.plain)
+            }
+            Button {
+                let panel = NSOpenPanel()
+                panel.title = "Select Video for \(slot.rawValue)"
+                panel.allowedContentTypes = [.movie, .video, .mpeg4Movie, .quickTimeMovie]
+                panel.allowsMultipleSelection = false
+                if panel.runModal() == .OK, let url = panel.url {
+                    WallpaperWindowController.shared.setSlotWallpaper(slot, url: url)
+                    slotRefresh += 1
+                }
+            } label: {
+                Image(systemName: WallpaperWindowController.shared.getSlotWallpaper(slot) != nil ? "checkmark.circle.fill" : "plus.circle")
+                    .font(.system(size: 16))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(WallpaperWindowController.shared.getSlotWallpaper(slot) != nil ? accent : .gray)
+        }
+        .padding(12)
+        .background(LiquidCardBackground(cornerRadius: 10, tint: accent, liquidGlass: liquidGlass))
     }
 }

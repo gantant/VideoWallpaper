@@ -118,12 +118,11 @@ struct ContentView: View {
             }
 
             Circle()
-                .fill(pulseColor.opacity(0.55))
+                .fill(pulseColor.opacity(pulseOpacity * 0.45))
                 .frame(width: 52, height: 52)
                 .scaleEffect(pulseScale)
-                .blur(radius: 28)
+                .blur(radius: 32)
                 .allowsHitTesting(false)
-                .opacity(pulseOpacity)
                 .blendMode(.plusLighter)
                 .zIndex(1000)
         }
@@ -335,20 +334,10 @@ struct ContentView: View {
 
             // Bottom bar (explicit side widths so gear/power never collapse)
             HStack(spacing: 8) {
-                Button {
+                AnimatedIconButton(icon: "gearshape.fill", animation: .twirl, color: .gray) {
                     SettingsWindowController.shared.show()
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(width: 40, height: 34)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    triggerPopoverPulse(.gray)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .frame(width: 40, height: 34, alignment: .center)
-                .layoutPriority(2)
-                .simultaneousGesture(TapGesture().onEnded { triggerPopoverPulse(.gray) })
 
                 Spacer(minLength: 8)
 
@@ -372,17 +361,10 @@ struct ContentView: View {
 
                 Spacer(minLength: 8)
 
-                Button { triggerPopoverPulse(.red); NSApp.terminate(nil) } label: {
-                    Image(systemName: "power")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(width: 40, height: 34)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                AnimatedIconButton(icon: "power", animation: .pulse, color: .red) {
+                    triggerPopoverPulse(.red)
+                    NSApp.terminate(nil)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .frame(width: 40, height: 34, alignment: .center)
-                .layoutPriority(2)
             }
             .frame(maxWidth: .infinity)
         }
@@ -396,9 +378,48 @@ struct ContentView: View {
         icon: String, label: String, color: Color,
         disabled: Bool = false, action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        AnimatedGridButton(icon: icon, label: label, color: color, liquidGlass: liquidGlass) {
+            action()
+        }
+        .disabled(disabled)
+        .opacity(disabled ? 0.45 : 1)
+    }
+
+    private func triggerPopoverPulse(_ color: Color) {
+        guard buttonRippleFX else { return }
+        pulseColor = color
+        pulseScale = 0.06
+        pulseOpacity = 0.45
+        withAnimation(.easeOut(duration: 0.5)) {
+            pulseScale = 16
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeOut(duration: 0.45)) {
+                pulseOpacity = 0
+            }
+        }
+    }
+}
+
+struct AnimatedGridButton: View {
+    let icon: String
+    let label: String
+    let color: Color
+    let liquidGlass: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+    @State private var iconOffset: CGFloat = 0
+
+    var body: some View {
+        Button(action: {
+            triggerBounce()
+            action()
+        }) {
             VStack(spacing: 5) {
-                Image(systemName: icon).font(.system(size: 18))
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .offset(y: iconOffset)
                 Text(label)
                     .font(.system(size: 10, weight: .semibold))
                     .multilineTextAlignment(.center)
@@ -407,18 +428,149 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, minHeight: 58)
         }
         .buttonStyle(GridButtonStyle(color: color, liquidGlass: liquidGlass))
-        .disabled(disabled)
-        .opacity(disabled ? 0.45 : 1)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.2)) {
+                isHovered = hovering
+                iconOffset = hovering ? -3 : 0
+            }
+            if !hovering {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    iconOffset = 0
+                }
+            }
+        }
     }
 
-    private func triggerPopoverPulse(_ color: Color) {
-        guard buttonRippleFX else { return }
-        pulseColor = color
-        pulseScale = 0.08
-        pulseOpacity = 0.92
-        withAnimation(.easeOut(duration: 0.85)) {
-            pulseScale = 2.35
-            pulseOpacity = 0
+    private func triggerBounce() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            iconOffset = -6
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                iconOffset = 0
+            }
+        }
+    }
+}
+
+enum IconAnimation {
+    case twirl
+    case bounce
+    case pulse
+    case wiggle
+    case spin
+}
+
+struct AnimatedIconButton: View {
+    let icon: String
+    let animation: IconAnimation
+    var color: Color = .white
+    let action: () -> Void
+    var animateOnHover: Bool = true
+
+    @State private var isHovered = false
+    @State private var animAngle: Double = 0
+    @State private var animScale: CGFloat = 1
+    @State private var animOffset: CGFloat = 0
+
+    var body: some View {
+        Button(action: {
+            action()
+        }) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 40, height: 34)
+                .background(Color.white.opacity(isHovered ? 0.15 : 0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .scaleEffect(animScale)
+                .rotationEffect(.degrees(animAngle))
+                .offset(y: animOffset)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(color)
+        .frame(width: 40, height: 34, alignment: .center)
+        .layoutPriority(2)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.2)) {
+                isHovered = hovering
+            }
+            if animateOnHover && hovering {
+                triggerAnimation()
+            } else if !hovering {
+                resetAnimation()
+            }
+        }
+    }
+
+    private func triggerAnimation() {
+        switch animation {
+        case .twirl:
+            animAngle = 0
+            withAnimation(.easeInOut(duration: 0.35)) {
+                animAngle = 180
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    animAngle = 0
+                }
+            }
+        case .bounce:
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                animScale = 1.2
+                animOffset = -4
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    animScale = 1
+                    animOffset = 0
+                }
+            }
+        case .pulse:
+            animScale = 1
+            withAnimation(.easeOut(duration: 0.15)) {
+                animScale = 1.15
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    animScale = 1
+                }
+            }
+        case .wiggle:
+            animAngle = 0
+            withAnimation(.easeInOut(duration: 0.1)) {
+                animAngle = -15
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    animAngle = 15
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    animAngle = -10
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    animAngle = 0
+                }
+            }
+        case .spin:
+            animAngle = 0
+            withAnimation(.linear(duration: 0.5)) {
+                animAngle = 360
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                animAngle = 0
+            }
+        }
+    }
+
+    private func resetAnimation() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            animAngle = 0
+            animScale = 1
+            animOffset = 0
         }
     }
 }

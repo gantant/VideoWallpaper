@@ -27,6 +27,7 @@ final class SettingsWindowController: NSObject {
         w.isOpaque = false
         w.backgroundColor = NSColor(red: 0.08, green: 0.08, blue: 0.1, alpha: 0.95)
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        w.level = .floating
 
         let wrapper = SettingsWindowWrapper()
         let host = NSHostingController(rootView: AnyView(wrapper))
@@ -36,12 +37,21 @@ final class SettingsWindowController: NSObject {
         w.center()
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        w.orderFront(nil)
 
         window = w
     }
 
     func hide() {
         window?.close()
+    }
+
+    func toggle() {
+        if let existing = window, existing.isVisible {
+            existing.orderOut(nil)
+        } else {
+            show()
+        }
     }
 }
 
@@ -78,6 +88,7 @@ final class DiscoverWindowController: NSObject {
         w.isOpaque = false
         w.backgroundColor = NSColor(red: 0.08, green: 0.08, blue: 0.1, alpha: 0.95)
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        w.level = .floating
 
         let wrapper = DiscoverWindowWrapper()
         let host = NSHostingController(rootView: AnyView(wrapper))
@@ -87,12 +98,21 @@ final class DiscoverWindowController: NSObject {
         w.center()
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        w.orderFront(nil)
 
         window = w
     }
 
     func hide() {
         window?.close()
+    }
+
+    func toggle() {
+        if let existing = window, existing.isVisible {
+            existing.orderOut(nil)
+        } else {
+            show()
+        }
     }
 }
 

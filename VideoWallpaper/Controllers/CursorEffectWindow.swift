@@ -79,7 +79,7 @@ class CursorEffectView: NSView {
     /// Padding around ripples/particles for stroke/glow; also used when expanding erase rects.
     private let effectPad: CGFloat = 56
     private func rippleMaxRadius() -> CGFloat {
-        max(bounds.width, bounds.height) * 5
+        120
     }
     /// Previous frame’s effect bounds so the next redraw clears trails as ripples expand/move.
     private var prevEffectDirty: CGRect = .null
